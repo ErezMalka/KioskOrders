@@ -1,15 +1,20 @@
-// app/login/page.tsx
+// app/login/page.tsx - גרסה ללא auth-helpers
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
+
+// יצירת Supabase client ישירות
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
   
-  const [email, setEmail] = useState('admin@test.com'); // מוגדר מראש לבדיקה
+  const [email, setEmail] = useState('admin@test.com');
   const [password, setPassword] = useState('Test1234!');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,9 +31,6 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
         });
 
         if (error) throw error;
@@ -89,9 +91,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
 
       if (error) throw error;
       
@@ -294,7 +294,7 @@ export default function LoginPage() {
           Password: Test1234!
         </div>
 
-        {/* Environment Info (for debugging) */}
+        {/* Environment Info */}
         <div style={{
           marginTop: '15px',
           fontSize: '11px',

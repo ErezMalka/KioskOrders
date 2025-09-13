@@ -1,11 +1,11 @@
-// app/login/page.tsx - מותאם למבנה הנכון של הטבלה
+// app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-// יצירת Supabase client ישירות
+// יצירת Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -20,6 +20,18 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
+
+  // בדיקת סשן קיים - אם המשתמש כבר מחובר, העבר לדשבורד
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        console.log('Active session found, redirecting to dashboard...');
+        router.push('/dashboard');
+      }
+    };
+    checkSession();
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,28 +50,14 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data?.user) {
-          // יצירת פרופיל למשתמש החדש עם המבנה הנכון
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              name: email.split('@')[0], // שם מהאימייל
-              role: 'user',
-              created_at: new Date().toISOString()
-            });
-
-          if (profileError) {
-            console.error('Profile creation error:', profileError);
-            // לא נכשיל את ההרשמה בגלל זה
-          }
-
-          setSuccess('נרשמת בהצלחה! אתה יכול להתחבר עכשיו.');
+          setSuccess('נרשמת בהצלחה! כעת תוכל להתחבר עם הפרטים שיצרת.');
           setIsSignUp(false);
+          // נקה את השדות אחרי רישום מוצלח
           setEmail('');
           setPassword('');
         }
       } else {
-        // התחברות
+        // התחברות למערכת
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -68,34 +66,29 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data?.user) {
-          console.log('Login successful!', data.user);
+          console.log('Login successful! User:', data.user.email);
+          setSuccess('התחברת בהצלחה! מעביר לדשבורד...');
           
-          // בדיקה אם יש פרופיל
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-
-          // אם אין פרופיל, ניצור אחד עם המבנה הנכון
-          if (profileError || !profile) {
-            console.log('Creating profile for user...');
-            await supabase.from('profiles').insert({
-              id: data.user.id,
-              name: data.user.email?.split('@')[0] || 'User',
-              role: 'SALES_AGENT', // ערך ברירת מחדל
-              created_at: new Date().toISOString()
-            });
-          }
-
-          // הפניה לדשבורד
-          router.push('/dashboard');
-          router.refresh();
+          // המתן רגע כדי שהמשתמש יראה את ההודעה
+          setTimeout(() => {
+            router.push('/dashboard');
+            router.refresh();
+          }, 1000);
         }
       }
     } catch (error: any) {
-      console.error('Auth error:', error);
-      setError(error.message || 'שגיאה בהתחברות');
+      console.error('Authentication error:', error);
+      
+      // הודעות שגיאה ידידותיות
+      if (error.message.includes('Invalid login credentials')) {
+        setError('אימייל או סיסמה שגויים');
+      } else if (error.message.includes('Email not confirmed')) {
+        setError('יש לאמת את כתובת האימייל לפני התחברות');
+      } else if (error.message.includes('User already registered')) {
+        setError('משתמש עם אימייל זה כבר קיים במערכת');
+      } else {
+        setError(error.message || 'שגיאה בהתחברות');
+      }
     } finally {
       setLoading(false);
     }
@@ -103,34 +96,28 @@ export default function LoginPage() {
 
   const handleForgotPassword = async () => {
     if (!email) {
-      setError('נא להזין אימייל');
+      setError('נא להזין כתובת אימייל');
       return;
     }
 
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      
       if (error) throw error;
       
-      setSuccess('נשלח קישור לאיפוס סיסמה לאימייל שלך');
+      setSuccess('קישור לאיפוס סיסמה נשלח לאימייל שלך');
     } catch (error: any) {
       setError(error.message || 'שגיאה בשליחת איפוס סיסמה');
     } finally {
       setLoading(false);
     }
   };
-
-  // בדיקת סשן קיים
-  useState(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        console.log('Active session found, redirecting...');
-        router.push('/dashboard');
-      }
-    });
-  });
 
   return (
     <div style={{
@@ -139,28 +126,34 @@ export default function LoginPage() {
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#f5f5f5',
-      direction: 'rtl'
+      direction: 'rtl',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     }}>
       <div style={{
         backgroundColor: 'white',
         padding: '40px',
-        borderRadius: '10px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.06)',
         width: '100%',
-        maxWidth: '400px'
+        maxWidth: '420px',
+        margin: '20px'
       }}>
-        {/* Logo/Title */}
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+        {/* Logo and Title */}
+        <div style={{ textAlign: 'center', marginBottom: '35px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '15px' }}>🛒</div>
           <h1 style={{ 
-            color: '#333',
-            fontSize: '28px',
-            marginBottom: '10px'
+            color: '#1a1a1a',
+            fontSize: '24px',
+            fontWeight: '600',
+            marginBottom: '8px',
+            margin: '0'
           }}>
-            🛒 מערכת ניהול הזמנות
+            מערכת ניהול הזמנות
           </h1>
           <p style={{ 
             color: '#666',
-            fontSize: '14px'
+            fontSize: '14px',
+            margin: '0'
           }}>
             Kiosk Order Management System
           </p>
@@ -169,13 +162,13 @@ export default function LoginPage() {
         {/* Error Message */}
         {error && (
           <div style={{
-            padding: '12px',
+            padding: '12px 16px',
             marginBottom: '20px',
-            borderRadius: '5px',
-            backgroundColor: '#f8d7da',
-            color: '#721c24',
-            border: '1px solid #f5c6cb',
-            fontSize: '14px'
+            borderRadius: '8px',
+            backgroundColor: '#fee',
+            color: '#c00',
+            fontSize: '14px',
+            borderRight: '4px solid #c00'
           }}>
             {error}
           </div>
@@ -184,13 +177,13 @@ export default function LoginPage() {
         {/* Success Message */}
         {success && (
           <div style={{
-            padding: '12px',
+            padding: '12px 16px',
             marginBottom: '20px',
-            borderRadius: '5px',
-            backgroundColor: '#d4edda',
-            color: '#155724',
-            border: '1px solid #c3e6cb',
-            fontSize: '14px'
+            borderRadius: '8px',
+            backgroundColor: '#e6f7e6',
+            color: '#2e7d2e',
+            fontSize: '14px',
+            borderRight: '4px solid #4CAF50'
           }}>
             {success}
           </div>
@@ -198,15 +191,15 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '24px' }}>
             <label style={{
               display: 'block',
               marginBottom: '8px',
-              color: '#555',
+              color: '#444',
               fontSize: '14px',
               fontWeight: '500'
             }}>
-              אימייל
+              כתובת אימייל
             </label>
             <input
               type="email"
@@ -214,23 +207,31 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="your@email.com"
+              disabled={loading}
               style={{
                 width: '100%',
-                padding: '12px',
+                padding: '12px 14px',
                 border: '1px solid #ddd',
-                borderRadius: '5px',
-                fontSize: '14px',
+                borderRadius: '8px',
+                fontSize: '15px',
                 direction: 'ltr',
-                outline: 'none'
+                outline: 'none',
+                transition: 'all 0.2s',
+                backgroundColor: loading ? '#f5f5f5' : 'white',
+                cursor: loading ? 'not-allowed' : 'text'
               }}
+              onFocus={(e) => {
+                if (!loading) e.target.style.borderColor = '#4CAF50';
+              }}
+              onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '24px' }}>
             <label style={{
               display: 'block',
               marginBottom: '8px',
-              color: '#555',
+              color: '#444',
               fontSize: '14px',
               fontWeight: '500'
             }}>
@@ -243,15 +244,23 @@ export default function LoginPage() {
               required
               placeholder="••••••••"
               minLength={6}
+              disabled={loading}
               style={{
                 width: '100%',
-                padding: '12px',
+                padding: '12px 14px',
                 border: '1px solid #ddd',
-                borderRadius: '5px',
-                fontSize: '14px',
+                borderRadius: '8px',
+                fontSize: '15px',
                 direction: 'ltr',
-                outline: 'none'
+                outline: 'none',
+                transition: 'all 0.2s',
+                backgroundColor: loading ? '#f5f5f5' : 'white',
+                cursor: loading ? 'not-allowed' : 'text'
               }}
+              onFocus={(e) => {
+                if (!loading) e.target.style.borderColor = '#4CAF50';
+              }}
+              onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
           </div>
 
@@ -265,18 +274,31 @@ export default function LoginPage() {
               backgroundColor: loading ? '#ccc' : '#4CAF50',
               color: 'white',
               border: 'none',
-              borderRadius: '5px',
+              borderRadius: '8px',
               fontSize: '16px',
               fontWeight: '500',
               cursor: loading ? 'not-allowed' : 'pointer',
-              marginBottom: '15px'
+              transition: 'background-color 0.2s',
+              marginBottom: '16px'
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) e.currentTarget.style.backgroundColor = '#45a049';
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) e.currentTarget.style.backgroundColor = '#4CAF50';
             }}
           >
-            {loading ? 'מעבד...' : (isSignUp ? 'הרשמה' : 'התחברות')}
+            {loading ? '⏳ מעבד...' : (isSignUp ? '📝 הרשמה' : '🔐 התחברות')}
           </button>
 
-          {/* Toggle SignUp/Login */}
-          <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+          {/* Secondary Actions */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            paddingTop: '16px',
+            borderTop: '1px solid #eee'
+          }}>
             <button
               type="button"
               onClick={() => {
@@ -284,68 +306,50 @@ export default function LoginPage() {
                 setError(null);
                 setSuccess(null);
               }}
+              disabled={loading}
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#4CAF50',
-                cursor: 'pointer',
+                color: loading ? '#999' : '#4CAF50',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: '14px',
-                textDecoration: 'underline'
+                fontWeight: '500',
+                padding: '4px 0'
               }}
             >
-              {isSignUp ? 'כבר יש לך חשבון? התחבר' : 'אין לך חשבון? הירשם'}
+              {isSignUp ? '← חזרה להתחברות' : '➕ יצירת חשבון חדש'}
             </button>
-          </div>
 
-          {/* Forgot Password */}
-          {!isSignUp && (
-            <div style={{ textAlign: 'center' }}>
+            {!isSignUp && (
               <button
                 type="button"
                 onClick={handleForgotPassword}
+                disabled={loading}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#666',
-                  cursor: 'pointer',
+                  color: loading ? '#999' : '#666',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   fontSize: '13px',
-                  textDecoration: 'underline'
+                  padding: '4px 0'
                 }}
               >
-                שכחת סיסמה?
+                שכחתי סיסמה
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </form>
 
         {/* Test Credentials Info */}
         <div style={{
           marginTop: '30px',
-          padding: '15px',
+          padding: '16px',
           backgroundColor: '#f0f8ff',
-          borderRadius: '5px',
+          borderRadius: '8px',
           border: '1px solid #b3d9ff',
           fontSize: '13px',
           color: '#004085'
         }}>
-          <strong>לבדיקה:</strong><br />
-          Email: admin@test.com<br />
-          Password: Test1234!<br />
-          <hr style={{ margin: '10px 0', borderColor: '#b3d9ff' }} />
-          <small>אם המשתמש לא קיים, השתמש ב"הירשם" ליצירת משתמש חדש</small>
-        </div>
-
-        {/* Debug Info */}
-        <div style={{
-          marginTop: '15px',
-          fontSize: '11px',
-          color: '#999',
-          textAlign: 'center'
-        }}>
-          Environment: {process.env.NODE_ENV}<br />
-          Supabase: {process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Connected' : 'Not Connected'}
-        </div>
-      </div>
-    </div>
-  );
-}
+          <div style={{ 
+            display: 'flex', 
+            alignIt

@@ -352,4 +352,51 @@ export default function LoginPage() {
         }}>
           <div style={{ 
             display: 'flex', 
-            alignIt
+            alignItems: 'center', 
+            marginBottom: '8px',
+            fontWeight: '600'
+          }}>
+            <span style={{ marginLeft: '6px' }}>🔑</span>
+            <span>פרטי גישה לבדיקה:</span>
+          </div>
+          <div style={{ 
+            fontFamily: 'monospace',
+            backgroundColor: 'white',
+            padding: '8px',
+            borderRadius: '4px',
+            marginTop: '8px',
+            direction: 'ltr'
+          }}>
+            <div>Email: admin@test.com</div>
+            <div>Password: Test1234!</div>
+          </div>
+          <div style={{ 
+            marginTop: '10px',
+            fontSize: '12px',
+            opacity: '0.8'
+          }}>
+            💡 טיפ: אם המשתמש לא קיים, השתמש בכפתור "יצירת חשבון חדש"
+          </div>
+        </div>
+
+        {/* System Status */}
+        <div style={{
+          marginTop: '20px',
+          padding: '12px',
+          backgroundColor: '#f9f9f9',
+          borderRadius: '8px',
+          fontSize: '11px',
+          color: '#666',
+          textAlign: 'center'
+        }}>
+          <div style={{ marginBottom: '4px' }}>
+            🟢 סטטוס מערכת: {process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
+          </div>
+          <div>
+            {process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ מחובר ל-Supabase' : '❌ לא מחובר ל-Supabase'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

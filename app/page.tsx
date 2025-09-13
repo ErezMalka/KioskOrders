@@ -1,5 +1,3 @@
-import Link from 'next/link'
-
 export default function HomePage() {
   return (
     <div style={{ 
@@ -17,30 +15,32 @@ export default function HomePage() {
           ברוך הבא למערכת
         </p>
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-          <Link 
+          <a 
             href="/dashboard" 
             style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#3b82f6',
               color: 'white',
               textDecoration: 'none',
-              borderRadius: '0.5rem'
+              borderRadius: '0.5rem',
+              display: 'inline-block'
             }}
           >
             לדשבורד
-          </Link>
-          <Link 
+          </a>
+          <a 
             href="/api/health" 
             style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#6b7280',
               color: 'white',
               textDecoration: 'none',
-              borderRadius: '0.5rem'
+              borderRadius: '0.5rem',
+              display: 'inline-block'
             }}
           >
             בדיקת מערכת
-          </Link>
+          </a>
         </div>
       </div>
     </div>

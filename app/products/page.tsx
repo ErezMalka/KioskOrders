@@ -847,7 +847,8 @@ export default function ProductsPage() {
                     marginTop: '20px'
                   }}
                   onClick={() => {
-                    alert(`נבחר: ${selectedProduct.name}\nתוספות: ${selectedOptions.length}\nסה"כ: ₪${calculateTotal(selectedProduct, selectedOptions).toLocaleString()}`);
+                    // Navigate to create order page
+                    window.location.href = '/orders/create';
                   }}
                 >
                   🛒 הוסף להזמנה

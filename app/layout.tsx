@@ -1,10 +1,4 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
-import { LanguageProvider } from '@/contexts/LanguageContext'
-import { AuthProvider } from '@/contexts/AuthContext'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Kiosk Order Management',
@@ -18,12 +12,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="he" dir="rtl">
-      <body className={inter.className}>
-        <LanguageProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </LanguageProvider>
+      <body style={{ margin: 0, padding: 0, fontFamily: 'system-ui' }}>
+        {children}
       </body>
     </html>
   )

@@ -1,4 +1,4 @@
-// app/login/page.tsx - גרסה ללא auth-helpers
+// app/login/page.tsx - מותאם למבנה הנכון של הטבלה
 'use client';
 
 import { useState } from 'react';
@@ -18,12 +18,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('Test1234!');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
       if (isSignUp) {
@@ -36,8 +38,25 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data?.user) {
-          setError('נרשמת בהצלחה! בדוק את האימייל שלך לאימות.');
+          // יצירת פרופיל למשתמש החדש עם המבנה הנכון
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              name: email.split('@')[0], // שם מהאימייל
+              role: 'user',
+              created_at: new Date().toISOString()
+            });
+
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+            // לא נכשיל את ההרשמה בגלל זה
+          }
+
+          setSuccess('נרשמת בהצלחה! אתה יכול להתחבר עכשיו.');
           setIsSignUp(false);
+          setEmail('');
+          setPassword('');
         }
       } else {
         // התחברות
@@ -49,22 +68,23 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data?.user) {
+          console.log('Login successful!', data.user);
+          
           // בדיקה אם יש פרופיל
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', data.user.id)
             .single();
 
-          // אם אין פרופיל, ניצור אחד
-          if (!profile) {
+          // אם אין פרופיל, ניצור אחד עם המבנה הנכון
+          if (profileError || !profile) {
+            console.log('Creating profile for user...');
             await supabase.from('profiles').insert({
               id: data.user.id,
-              email: data.user.email,
-              full_name: data.user.email?.split('@')[0],
-              role: 'user',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              name: data.user.email?.split('@')[0] || 'User',
+              role: 'SALES_AGENT', // ערך ברירת מחדל
+              created_at: new Date().toISOString()
             });
           }
 
@@ -92,16 +112,25 @@ export default function LoginPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
-
       if (error) throw error;
       
-      setError('נשלח קישור לאיפוס סיסמה לאימייל שלך');
+      setSuccess('נשלח קישור לאיפוס סיסמה לאימייל שלך');
     } catch (error: any) {
       setError(error.message || 'שגיאה בשליחת איפוס סיסמה');
     } finally {
       setLoading(false);
     }
   };
+
+  // בדיקת סשן קיים
+  useState(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        console.log('Active session found, redirecting...');
+        router.push('/dashboard');
+      }
+    });
+  });
 
   return (
     <div style={{
@@ -137,18 +166,33 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Error/Success Message */}
+        {/* Error Message */}
         {error && (
           <div style={{
             padding: '12px',
             marginBottom: '20px',
             borderRadius: '5px',
-            backgroundColor: error.includes('בהצלחה') ? '#d4edda' : '#f8d7da',
-            color: error.includes('בהצלחה') ? '#155724' : '#721c24',
-            border: `1px solid ${error.includes('בהצלחה') ? '#c3e6cb' : '#f5c6cb'}`,
+            backgroundColor: '#f8d7da',
+            color: '#721c24',
+            border: '1px solid #f5c6cb',
             fontSize: '14px'
           }}>
             {error}
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div style={{
+            padding: '12px',
+            marginBottom: '20px',
+            borderRadius: '5px',
+            backgroundColor: '#d4edda',
+            color: '#155724',
+            border: '1px solid #c3e6cb',
+            fontSize: '14px'
+          }}>
+            {success}
           </div>
         )}
 
@@ -177,11 +221,8 @@ export default function LoginPage() {
                 borderRadius: '5px',
                 fontSize: '14px',
                 direction: 'ltr',
-                transition: 'border-color 0.3s',
                 outline: 'none'
               }}
-              onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
           </div>
 
@@ -209,11 +250,8 @@ export default function LoginPage() {
                 borderRadius: '5px',
                 fontSize: '14px',
                 direction: 'ltr',
-                transition: 'border-color 0.3s',
                 outline: 'none'
               }}
-              onFocus={(e) => e.target.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
           </div>
 
@@ -231,20 +269,21 @@ export default function LoginPage() {
               fontSize: '16px',
               fontWeight: '500',
               cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'background-color 0.3s',
               marginBottom: '15px'
             }}
-            onMouseEnter={(e) => !loading && (e.currentTarget.style.backgroundColor = '#45a049')}
-            onMouseLeave={(e) => !loading && (e.currentTarget.style.backgroundColor = '#4CAF50')}
           >
-            {loading ? 'מתחבר...' : (isSignUp ? 'הרשמה' : 'התחברות')}
+            {loading ? 'מעבד...' : (isSignUp ? 'הרשמה' : 'התחברות')}
           </button>
 
           {/* Toggle SignUp/Login */}
           <div style={{ textAlign: 'center', marginBottom: '15px' }}>
             <button
               type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError(null);
+                setSuccess(null);
+              }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -291,10 +330,12 @@ export default function LoginPage() {
         }}>
           <strong>לבדיקה:</strong><br />
           Email: admin@test.com<br />
-          Password: Test1234!
+          Password: Test1234!<br />
+          <hr style={{ margin: '10px 0', borderColor: '#b3d9ff' }} />
+          <small>אם המשתמש לא קיים, השתמש ב"הירשם" ליצירת משתמש חדש</small>
         </div>
 
-        {/* Environment Info */}
+        {/* Debug Info */}
         <div style={{
           marginTop: '15px',
           fontSize: '11px',

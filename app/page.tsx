@@ -1,47 +1,45 @@
-'use client'
-
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 
 export default function HomePage() {
-  const router = useRouter()
-  
-  // Redirect to dashboard after 2 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      router.push('/dashboard')
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [router])
-  
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50" dir="rtl">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4 text-gray-900">
+    <div style={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      backgroundColor: '#f3f4f6'
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>
           מערכת ניהול הזמנות קיוסק
         </h1>
-        <p className="text-xl text-gray-600 mb-8">
-          מעביר לדשבורד...
+        <p style={{ fontSize: '1.25rem', color: '#6b7280', marginBottom: '2rem' }}>
+          ברוך הבא למערכת
         </p>
-        <div className="space-y-4">
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
           <Link 
             href="/dashboard" 
-            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '0.5rem'
+            }}
           >
             לדשבורד
           </Link>
-          <br />
           <Link 
-            href="/login" 
-            className="inline-block px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            href="/api/health" 
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#6b7280',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '0.5rem'
+            }}
           >
-            התחברות
-          </Link>
-        </div>
-        <div className="mt-8 text-sm text-gray-500">
-          <Link href="/api/health" className="underline">
-            בדיקת מערכת (Health Check)
+            בדיקת מערכת
           </Link>
         </div>
       </div>

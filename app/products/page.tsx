@@ -1,14 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
-
-interface ProductOption {
-  id: string;
-  name: string;
-  price: number;
-}
+import { supabase } from '@/lib/supabaseClient';
 
 interface Product {
   id: string;
@@ -16,7 +10,14 @@ interface Product {
   description: string;
   base_price: number;
   max_discount: number;
-  product_options: ProductOption[];
+  product_options?: ProductOption[];
+}
+
+interface ProductOption {
+  id: string;
+  product_id: string;
+  name: string;
+  price: number;
 }
 
 export default function ProductsPage() {
@@ -27,8 +28,9 @@ export default function ProductsPage() {
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [quantity, setQuantity] = useState(1);
   const [discount, setDiscount] = useState(0);
+  const [cartCount, setCartCount] = useState(0);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const router = useRouter();
-  const supabase = createClientComponentClient();
 
   // State for new product form
   const [newProduct, setNewProduct] = useState({
@@ -39,8 +41,22 @@ export default function ProductsPage() {
   });
 
   useEffect(() => {
+    checkAuth();
     fetchProducts();
+    updateCartCount();
   }, []);
+
+  const updateCartCount = () => {
+    const cart = JSON.parse(sessionStorage.getItem('orderCart') || '[]');
+    setCartCount(cart.length);
+  };
+
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.push('/login');
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -82,8 +98,8 @@ export default function ProductsPage() {
   };
 
   const handleAddToOrder = (product: Product) => {
-    // שמירת המוצר ב-sessionStorage
-    const orderData = {
+    // יצירת אובייקט פריט להוספה
+    const orderItem = {
       product: {
         id: product.id,
         name: product.name,
@@ -91,30 +107,49 @@ export default function ProductsPage() {
         max_discount: product.max_discount
       },
       selectedOptions: Array.from(selectedOptions).map(optionId => {
-        const option = product.product_options.find(o => o.id === optionId);
+        const option = product.product_options?.find(o => o.id === optionId);
         return option ? { id: option.id, name: option.name, price: option.price } : null;
       }).filter(Boolean),
       quantity: quantity,
-      discount: discount
+      discount: discount,
+      timestamp: Date.now() // להבדיל בין פריטים זהים
     };
 
-    // שמירה ב-sessionStorage
+    // קבלת העגלה הקיימת
     const existingCart = JSON.parse(sessionStorage.getItem('orderCart') || '[]');
-    existingCart.push(orderData);
+    
+    // הוספת הפריט החדש לעגלה
+    existingCart.push(orderItem);
+    
+    // שמירה בחזרה
     sessionStorage.setItem('orderCart', JSON.stringify(existingCart));
-
-    // ניתוב לעמוד יצירת הזמנה
-    router.push('/orders/create');
+    
+    // עדכון מונה העגלה
+    setCartCount(existingCart.length);
+    
+    // הצגת הודעת הצלחה
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+    
+    // איפוס הבחירות
+    setSelectedProduct(null);
+    setSelectedOptions(new Set());
+    setQuantity(1);
+    setDiscount(0);
   };
 
   const calculateTotalPrice = (product: Product) => {
     let total = product.base_price;
     selectedOptions.forEach(optionId => {
-      const option = product.product_options.find(o => o.id === optionId);
+      const option = product.product_options?.find(o => o.id === optionId);
       if (option) total += option.price;
     });
     total = total * quantity * (1 - discount / 100);
     return total;
+  };
+
+  const goToCart = () => {
+    router.push('/orders/create');
   };
 
   if (loading) {
@@ -127,23 +162,62 @@ export default function ProductsPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', direction: 'rtl' }}>
+      {/* Header with cart */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1 style={{ margin: 0 }}>ניהול מוצרים</h1>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          {showAddForm ? 'ביטול' : '+ הוסף מוצר חדש'}
-        </button>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          {cartCount > 0 && (
+            <button
+              onClick={goToCart}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                position: 'relative'
+              }}
+            >
+              🛒 לעגלה ({cartCount} פריטים)
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            {showAddForm ? 'ביטול' : '+ הוסף מוצר חדש'}
+          </button>
+        </div>
       </div>
+
+      {/* Success message */}
+      {showSuccessMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '15px 30px',
+          backgroundColor: '#4CAF50',
+          color: 'white',
+          borderRadius: '5px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 2000,
+          animation: 'slideDown 0.3s ease'
+        }}>
+          ✓ המוצר נוסף לעגלה בהצלחה!
+        </div>
+      )}
 
       {showAddForm && (
         <div style={{
@@ -371,7 +445,7 @@ export default function ProductsPage() {
                   fontSize: '16px'
                 }}
               >
-                אישור והוספה לעגלה
+                הוסף לעגלה ✓
               </button>
               <button
                 onClick={() => setSelectedProduct(null)}

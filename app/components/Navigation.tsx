@@ -9,10 +9,18 @@ export default function Navigation() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     checkUser();
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, [pathname]);
+
+  const checkMobile = () => {
+    setIsMobile(window.innerWidth <= 768);
+  };
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -39,172 +47,191 @@ export default function Navigation() {
   ];
 
   return (
-    <nav style={{
-      backgroundColor: '#2c3e50',
-      padding: '0',
-      boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 100,
-      direction: 'rtl'
-    }}>
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '10px 20px'
+    <>
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .desktop-menu {
+            display: none !important;
+          }
+          .mobile-menu-button {
+            display: block !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .desktop-menu {
+            display: flex !important;
+          }
+          .mobile-menu-button {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <nav style={{
+        backgroundColor: '#2c3e50',
+        padding: '0',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        direction: 'rtl'
       }}>
-        {/* Logo/Title */}
         <div style={{
-          color: 'white',
-          fontSize: '20px',
-          fontWeight: 'bold',
-          cursor: 'pointer'
-        }}
-        onClick={() => router.push('/dashboard')}
-        >
-          🏪 מערכת ניהול הזמנות
+          maxWidth: '1400px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '10px 20px'
+        }}>
+          {/* Logo/Title */}
+          <div style={{
+            color: 'white',
+            fontSize: '20px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+          onClick={() => router.push('/dashboard')}
+          >
+            🏪 מערכת ניהול הזמנות
+          </div>
+
+          {/* Desktop Menu */}
+          <div 
+            className="desktop-menu"
+            style={{
+              display: 'flex',
+              gap: '5px',
+              alignItems: 'center'
+            }}
+          >
+            {menuItems.map(item => (
+              <button
+                key={item.path}
+                onClick={() => router.push(item.path)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: pathname === item.path ? '#34495e' : 'transparent',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'background-color 0.3s',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseOver={(e) => {
+                  if (pathname !== item.path) {
+                    e.currentTarget.style.backgroundColor = '#34495e';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (pathname !== item.path) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+            
+            {/* User info & Logout */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              marginRight: '20px',
+              paddingRight: '20px',
+              borderRight: '1px solid #34495e'
+            }}>
+              {user && (
+                <span style={{ color: '#ecf0f1', fontSize: '14px' }}>
+                  {user.email}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                יציאה
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            className="mobile-menu-button"
+            onClick={() => setMenuOpen(!menuOpen)}
+            style={{
+              display: 'none',
+              padding: '8px',
+              backgroundColor: 'transparent',
+              color: 'white',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer'
+            }}
+          >
+            ☰
+          </button>
         </div>
 
-        {/* Desktop Menu */}
-        <div style={{
-          display: 'flex',
-          gap: '5px',
-          alignItems: 'center',
-          '@media (max-width: 768px)': {
-            display: 'none'
-          }
-        }}>
-          {menuItems.map(item => (
-            <button
-              key={item.path}
-              onClick={() => router.push(item.path)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: pathname === item.path ? '#34495e' : 'transparent',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                transition: 'background-color 0.3s',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseOver={(e) => {
-                if (pathname !== item.path) {
-                  e.currentTarget.style.backgroundColor = '#34495e';
-                }
-              }}
-              onMouseOut={(e) => {
-                if (pathname !== item.path) {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-          
-          {/* User info & Logout */}
+        {/* Mobile Menu */}
+        {menuOpen && (
           <div style={{
+            backgroundColor: '#34495e',
+            padding: '10px',
             display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginRight: '20px',
-            paddingRight: '20px',
-            borderRight: '1px solid #34495e'
+            flexDirection: 'column',
+            gap: '5px'
           }}>
-            {user && (
-              <span style={{ color: '#ecf0f1', fontSize: '14px' }}>
-                {user.email}
-              </span>
-            )}
+            {menuItems.map(item => (
+              <button
+                key={item.path}
+                onClick={() => {
+                  router.push(item.path);
+                  setMenuOpen(false);
+                }}
+                style={{
+                  padding: '10px',
+                  backgroundColor: pathname === item.path ? '#2c3e50' : 'transparent',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  textAlign: 'right'
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
             <button
               onClick={handleLogout}
               style={{
-                padding: '8px 16px',
+                padding: '10px',
                 backgroundColor: '#e74c3c',
                 color: 'white',
                 border: 'none',
                 borderRadius: '5px',
                 cursor: 'pointer',
-                fontSize: '14px'
+                fontSize: '16px',
+                marginTop: '10px'
               }}
             >
               יציאה
             </button>
           </div>
-        </div>
-
-        {/* Mobile Menu Button */}
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{
-            display: 'none',
-            padding: '8px',
-            backgroundColor: 'transparent',
-            color: 'white',
-            border: 'none',
-            fontSize: '24px',
-            cursor: 'pointer',
-            '@media (max-width: 768px)': {
-              display: 'block'
-            }
-          }}
-        >
-          ☰
-        </button>
-      </div>
-
-      {/* Mobile Menu */}
-      {menuOpen && (
-        <div style={{
-          backgroundColor: '#34495e',
-          padding: '10px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '5px'
-        }}>
-          {menuItems.map(item => (
-            <button
-              key={item.path}
-              onClick={() => {
-                router.push(item.path);
-                setMenuOpen(false);
-              }}
-              style={{
-                padding: '10px',
-                backgroundColor: pathname === item.path ? '#2c3e50' : 'transparent',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                textAlign: 'right'
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '10px',
-              backgroundColor: '#e74c3c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              marginTop: '10px'
-            }}
-          >
-            יציאה
-          </button>
-        </div>
-      )}
-    </nav>
+        )}
+      </nav>
+    </>
   );
 }

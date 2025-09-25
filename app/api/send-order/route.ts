@@ -1,42 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
-// Green API Configurations for different agents
-const GREEN_API_ACCOUNTS = {
-  // סוכן 1
-  'agent1': {
-    instance: process.env.GREEN_API_INSTANCE_1 || '',
-    token: process.env.GREEN_API_TOKEN_1 || '',
-    name: 'ארז',
-    phone: '050-1111111'
-  },
-  // סוכן 2
-  'agent2': {
-    instance: process.env.GREEN_API_INSTANCE_2 || '',
-    token: process.env.GREEN_API_TOKEN_2 || '',
-    name: 'דיאנה',
-    phone: '050-2222222'
-  },
-  // סוכן 3
-  'agent3': {
-    instance: process.env.GREEN_API_INSTANCE_3 || '',
-    token: process.env.GREEN_API_TOKEN_3 || '',
-    name: 'משה',
-    phone: '050-3333333'
-  },
-  // ברירת מחדל - חשבון ראשי
-  'default': {
-    instance: process.env.GREEN_API_INSTANCE || '',
-    token: process.env.GREEN_API_TOKEN || '',
-    name: 'מערכת הזמנות',
-    phone: '050-0000000'
-  }
-};
+// Initialize Supabase client for server-side
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { method, order, customer, agentId } = body;
+    const { method, order, customer, userId } = body;
 
     if (!order || !customer) {
       return NextResponse.json(
@@ -45,29 +19,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the agent's Green API credentials
-    let agentConfig = GREEN_API_ACCOUNTS['default'];
-    
-    if (agentId) {
-      // Try to get agent from database first
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, name, phone, green_api_instance, green_api_token')
-        .eq('id', agentId)
-        .single();
-      
-      if (profile?.green_api_instance && profile?.green_api_token) {
-        // Use agent's personal Green API account
-        agentConfig = {
-          instance: profile.green_api_instance,
-          token: profile.green_api_token,
-          name: profile.name,
-          phone: profile.phone
-        };
-      } else if (GREEN_API_ACCOUNTS[agentId]) {
-        // Use predefined agent config
-        agentConfig = GREEN_API_ACCOUNTS[agentId];
-      }
+    // Get agent configuration from database
+    const agentConfig = await getAgentConfig(userId);
+
+    if (!agentConfig.instance || !agentConfig.token) {
+      console.error('No Green API configured for user:', userId);
+      return NextResponse.json(
+        { error: `WhatsApp לא מוגדר עבור המשתמש. יש להגדיר בהגדרות המערכת.` },
+        { status: 400 }
+      );
     }
 
     switch (method) {
@@ -75,8 +35,6 @@ export async function POST(request: NextRequest) {
         return await sendWhatsApp(order, customer, agentConfig);
       case 'email':
         return await sendEmail(order, customer, agentConfig);
-      case 'sms':
-        return await sendSMS(order, customer, agentConfig);
       default:
         return NextResponse.json(
           { error: 'Invalid method' },
@@ -84,7 +42,7 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error('Error sending order:', error);
+    console.error('Error in send-order API:', error);
     return NextResponse.json(
       { error: 'Failed to send order' },
       { status: 500 }
@@ -92,16 +50,58 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
+async function getAgentConfig(userId: string | null) {
+  if (!userId) {
+    // Return default config if no user
+    return {
+      instance: process.env.GREEN_API_DEFAULT_INSTANCE || '',
+      token: process.env.GREEN_API_DEFAULT_TOKEN || '',
+      name: 'מערכת הזמנות',
+      phone: process.env.COMPANY_PHONE || '050-0000000'
+    };
+  }
+
   try {
-    // Check if agent has Green API configured
-    if (!agentConfig.instance || !agentConfig.token) {
-      return NextResponse.json(
-        { error: 'WhatsApp not configured for this agent' },
-        { status: 400 }
-      );
+    // Get user profile with Green API settings
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('name, phone, green_api_instance, green_api_token, whatsapp_number')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
     }
 
+    if (profile?.green_api_instance && profile?.green_api_token) {
+      return {
+        instance: profile.green_api_instance,
+        token: profile.green_api_token,
+        name: profile.name || 'סוכן',
+        phone: profile.whatsapp_number || profile.phone || '050-0000000'
+      };
+    }
+
+    // Fall back to environment variables if no DB config
+    return {
+      instance: process.env.GREEN_API_DEFAULT_INSTANCE || '',
+      token: process.env.GREEN_API_DEFAULT_TOKEN || '',
+      name: profile?.name || 'סוכן',
+      phone: profile?.phone || '050-0000000'
+    };
+  } catch (error) {
+    console.error('Error getting agent config:', error);
+    return {
+      instance: process.env.GREEN_API_DEFAULT_INSTANCE || '',
+      token: process.env.GREEN_API_DEFAULT_TOKEN || '',
+      name: 'מערכת הזמנות',
+      phone: process.env.COMPANY_PHONE || '050-0000000'
+    };
+  }
+}
+
+async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
+  try {
     // Format phone number for WhatsApp (Israel +972)
     let phoneNumber = customer.phone.replace(/\D/g, '');
     if (phoneNumber.startsWith('0')) {
@@ -110,6 +110,12 @@ async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
 
     // Format order message with agent info
     const message = formatOrderMessage(order, customer, agentConfig);
+
+    console.log('Sending WhatsApp via Green API:', {
+      instance: agentConfig.instance,
+      agent: agentConfig.name,
+      to: phoneNumber
+    });
 
     // Send via Green API
     const response = await fetch(
@@ -126,14 +132,15 @@ async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
       }
     );
 
+    const responseData = await response.json();
+    
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Green API error:', errorData);
-      throw new Error('Failed to send WhatsApp message');
+      console.error('Green API error response:', responseData);
+      throw new Error(responseData.message || 'Failed to send WhatsApp message');
     }
 
-    const result = await response.json();
-    
+    console.log('WhatsApp sent successfully:', responseData);
+
     // Log the message in database
     await logMessageSent(order.id, customer.id, 'whatsapp', agentConfig.name);
 
@@ -141,12 +148,12 @@ async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
       success: true, 
       method: 'whatsapp',
       agent: agentConfig.name,
-      messageId: result.idMessage 
+      messageId: responseData.idMessage 
     });
   } catch (error) {
     console.error('WhatsApp error:', error);
     return NextResponse.json(
-      { error: 'Failed to send WhatsApp message' },
+      { error: `Failed to send WhatsApp: ${error}` },
       { status: 500 }
     );
   }
@@ -154,16 +161,12 @@ async function sendWhatsApp(order: any, customer: any, agentConfig: any) {
 
 async function sendEmail(order: any, customer: any, agentConfig: any) {
   try {
-    // Format email content with agent info
     const htmlContent = formatOrderEmail(order, customer, agentConfig);
 
-    // Here you would integrate with your email service
-    // For now, we'll just log it
+    // TODO: Add actual email service integration
     console.log('Email would be sent to:', customer.email);
     console.log('From agent:', agentConfig.name);
-    console.log('Email content:', htmlContent);
 
-    // Log the message in database
     await logMessageSent(order.id, customer.id, 'email', agentConfig.name);
 
     return NextResponse.json({ 
@@ -181,18 +184,8 @@ async function sendEmail(order: any, customer: any, agentConfig: any) {
   }
 }
 
-async function sendSMS(order: any, customer: any, agentConfig: any) {
-  // Placeholder for SMS integration
-  return NextResponse.json({ 
-    success: true, 
-    method: 'sms', 
-    agent: agentConfig.name,
-    demo: true 
-  });
-}
-
 function formatOrderMessage(order: any, customer: any, agentConfig: any) {
-  let message = `🛍️ *אישור הזמנה #${order.id?.slice(0, 8)}*\n\n`;
+  let message = `🛍️ *אישור הזמנה #${order.id?.slice(0, 8) || 'חדשה'}*\n\n`;
   message += `שלום ${customer.name},\n`;
   message += `תודה על הזמנתך!\n\n`;
   
@@ -200,27 +193,27 @@ function formatOrderMessage(order: any, customer: any, agentConfig: any) {
   
   if (order.items && order.items.length > 0) {
     order.items.forEach((item: any, index: number) => {
-      message += `${index + 1}. ${item.product?.name || 'מוצר'}\n`;
+      message += `\n${index + 1}. ${item.product_name || item.product?.name || 'מוצר'}\n`;
       message += `   כמות: ${item.quantity}\n`;
       if (item.discount_percentage > 0) {
         message += `   הנחה: ${item.discount_percentage}%\n`;
       }
-      message += `   מחיר: ₪${item.total_price}\n\n`;
+      message += `   מחיר: ₪${item.total_price}\n`;
     });
   }
   
-  message += `💰 *סה"כ: ₪${order.total_amount}*\n\n`;
-  message += `📍 סטטוס: ${translateStatus(order.status)}\n`;
+  message += `\n💰 *סה"כ להזמנה: ₪${order.total_amount}*\n`;
+  message += `\n📍 סטטוס: ${translateStatus(order.status)}\n`;
   
-  if (order.payment_plan) {
+  if (order.payment_plan?.name) {
     message += `💳 תוכנית תשלום: ${order.payment_plan.name}\n`;
   }
   
   message += `\n━━━━━━━━━━━━━━━\n`;
-  message += `👤 *הסוכן שלך: ${agentConfig.name}*\n`;
+  message += `\n👤 *הסוכן האישי שלך: ${agentConfig.name}*\n`;
   message += `📞 טלפון ישיר: ${agentConfig.phone}\n`;
-  message += `\nלכל שאלה או בקשה, אני כאן בשבילך!\n`;
-  message += `\nתודה שבחרת בנו! 🙏`;
+  message += `\n💬 אני כאן לכל שאלה או בקשה!\n`;
+  message += `\n✨ תודה שבחרת בנו!`;
   
   return message;
 }
@@ -236,28 +229,32 @@ function formatOrderEmail(order: any, customer: any, agentConfig: any) {
           font-family: Arial, sans-serif; 
           direction: rtl; 
           line-height: 1.6;
+          background: #f4f4f4;
+          margin: 0;
+          padding: 0;
         }
         .container { 
           max-width: 600px; 
-          margin: 0 auto; 
-          padding: 20px; 
+          margin: 20px auto; 
+          background: white;
+          border-radius: 10px;
+          overflow: hidden;
+          box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
         .header { 
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: white; 
           padding: 30px; 
           text-align: center;
-          border-radius: 10px 10px 0 0;
         }
         .content { 
           padding: 30px; 
-          background: #f9f9f9; 
         }
         .order-item { 
-          background: white; 
+          background: #f9f9f9; 
           padding: 15px; 
-          margin: 10px 0; 
-          border-radius: 5px;
+          margin: 15px 0; 
+          border-radius: 8px;
           border-right: 4px solid #667eea;
         }
         .total { 
@@ -266,29 +263,22 @@ function formatOrderEmail(order: any, customer: any, agentConfig: any) {
           color: #27ae60;
           text-align: center;
           padding: 20px;
-          background: white;
-          border-radius: 5px;
+          background: #f0f8f0;
+          border-radius: 8px;
           margin: 20px 0;
         }
-        .agent-info {
-          background: #e8f4f8;
+        .agent-box {
+          background: linear-gradient(135deg, #e8f4f8 0%, #f0e8ff 100%);
           padding: 20px;
-          border-radius: 5px;
+          border-radius: 8px;
           margin: 20px 0;
+          border: 1px solid #d0d0ff;
         }
         .footer { 
           text-align: center; 
           padding: 20px; 
+          background: #f9f9f9;
           color: #666; 
-        }
-        .button {
-          display: inline-block;
-          padding: 12px 30px;
-          background: #667eea;
-          color: white;
-          text-decoration: none;
-          border-radius: 5px;
-          margin: 10px;
         }
       </style>
     </head>
@@ -296,20 +286,23 @@ function formatOrderEmail(order: any, customer: any, agentConfig: any) {
       <div class="container">
         <div class="header">
           <h1>✨ הזמנתך התקבלה בהצלחה!</h1>
-          <p>הזמנה מספר: #${order.id?.slice(0, 8)}</p>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">
+            הזמנה מספר: #${order.id?.slice(0, 8) || 'חדשה'}
+          </p>
         </div>
         
         <div class="content">
           <p style="font-size: 18px;">שלום ${customer.name},</p>
-          <p>תודה רבה על האמון! קיבלנו את הזמנתך ואנחנו מטפלים בה.</p>
+          <p>תודה רבה על האמון! קיבלנו את הזמנתך ואנחנו כבר מטפלים בה.</p>
           
-          <h2>📦 פרטי ההזמנה:</h2>
-          ${order.items?.map((item: any) => `
+          <h2 style="color: #667eea;">📦 פרטי ההזמנה:</h2>
+          
+          ${order.items?.map((item: any, index: number) => `
             <div class="order-item">
-              <h3>${item.product?.name || 'מוצר'}</h3>
-              <p>כמות: ${item.quantity} יחידות</p>
+              <h3>${index + 1}. ${item.product_name || item.product?.name || 'מוצר'}</h3>
+              <p>כמות: <strong>${item.quantity}</strong></p>
               ${item.discount_percentage > 0 ? `<p>הנחה: ${item.discount_percentage}%</p>` : ''}
-              <p><strong>מחיר: ₪${item.total_price}</strong></p>
+              <p>מחיר: <strong>₪${item.total_price}</strong></p>
             </div>
           `).join('') || '<p>אין פריטים</p>'}
           
@@ -317,13 +310,11 @@ function formatOrderEmail(order: any, customer: any, agentConfig: any) {
             💰 סה"כ לתשלום: ₪${order.total_amount}
           </div>
           
-          <p><strong>📍 סטטוס הזמנה:</strong> ${translateStatus(order.status)}</p>
+          <p><strong>📍 סטטוס:</strong> ${translateStatus(order.status)}</p>
           
-          ${order.payment_plan ? `
-            <p><strong>💳 תוכנית תשלום:</strong> ${order.payment_plan.name}</p>
-          ` : ''}
+          ${order.payment_plan?.name ? `<p><strong>💳 תוכנית תשלום:</strong> ${order.payment_plan.name}</p>` : ''}
           
-          <div class="agent-info">
+          <div class="agent-box">
             <h3>👤 הסוכן האישי שלך</h3>
             <p><strong>${agentConfig.name}</strong></p>
             <p>📞 טלפון ישיר: ${agentConfig.phone}</p>
@@ -333,8 +324,8 @@ function formatOrderEmail(order: any, customer: any, agentConfig: any) {
         
         <div class="footer">
           <p>תודה שבחרת בנו! 🙏</p>
-          <p style="color: #999; font-size: 12px;">
-            הודעה זו נשלחה אוטומטית ממערכת ההזמנות
+          <p style="font-size: 12px; color: #999;">
+            ${process.env.COMPANY_NAME || 'Bite'} | הודעה זו נשלחה אוטומטית
           </p>
         </div>
       </div>
@@ -356,7 +347,6 @@ function translateStatus(status: string) {
 
 async function logMessageSent(orderId: string, customerId: string, method: string, agentName: string) {
   try {
-    // Log to order_events table
     await supabase
       .from('order_events')
       .insert({

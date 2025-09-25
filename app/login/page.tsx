@@ -1,401 +1,373 @@
-// app/login/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 
-// יצירת Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export default function LoginPage() {
+export default function Login() {
   const router = useRouter();
-  
-  const [email, setEmail] = useState('admin@test.com');
-  const [password, setPassword] = useState('Test1234!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
-
-  // בדיקת סשן קיים - אם המשתמש כבר מחובר, העבר לדשבורד
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        console.log('Active session found, redirecting to dashboard...');
-        router.push('/dashboard');
-      }
-    };
-    checkSession();
-  }, [router]);
+  const [error, setError] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
-    setError(null);
-    setSuccess(null);
 
     try {
-      if (isSignUp) {
-        // רישום משתמש חדש
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data?.user) {
-          setSuccess('נרשמת בהצלחה! כעת תוכל להתחבר עם הפרטים שיצרת.');
-          setIsSignUp(false);
-          // נקה את השדות אחרי רישום מוצלח
-          setEmail('');
-          setPassword('');
-        }
+      // Get user role after successful login
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, name')
+        .eq('id', data.user.id)
+        .single();
+
+      // Redirect based on role
+      if (profile?.role === 'SUPER_ADMIN') {
+        router.push('/admin/users');
       } else {
-        // התחברות למערכת
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-
-        if (data?.user) {
-          console.log('Login successful! User:', data.user.email);
-          setSuccess('התחברת בהצלחה! מעביר לדשבורד...');
-          
-          // המתן רגע כדי שהמשתמש יראה את ההודעה
-          setTimeout(() => {
-            router.push('/dashboard');
-            router.refresh();
-          }, 1000);
-        }
+        router.push('/dashboard');
       }
     } catch (error: any) {
-      console.error('Authentication error:', error);
-      
-      // הודעות שגיאה ידידותיות
-      if (error.message.includes('Invalid login credentials')) {
-        setError('אימייל או סיסמה שגויים');
-      } else if (error.message.includes('Email not confirmed')) {
-        setError('יש לאמת את כתובת האימייל לפני התחברות');
-      } else if (error.message.includes('User already registered')) {
-        setError('משתמש עם אימייל זה כבר קיים במערכת');
-      } else {
-        setError(error.message || 'שגיאה בהתחברות');
-      }
+      console.error('Login error:', error);
+      setError('שם משתמש או סיסמה שגויים');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError('נא להזין כתובת אימייל');
-      return;
-    }
-
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
     setLoading(true);
-    setError(null);
-    setSuccess(null);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
-      
+
       if (error) throw error;
       
-      setSuccess('קישור לאיפוס סיסמה נשלח לאימייל שלך');
+      setError('נשלח אימייל לאיפוס סיסמה');
+      setShowForgotPassword(false);
     } catch (error: any) {
-      setError(error.message || 'שגיאה בשליחת איפוס סיסמה');
+      setError('שגיאה בשליחת אימייל איפוס');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div style={{
+  const styles = {
+    container: {
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#f5f5f5',
-      direction: 'rtl',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '40px',
-        borderRadius: '12px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.06)',
-        width: '100%',
-        maxWidth: '420px',
-        margin: '20px'
-      }}>
-        {/* Logo and Title */}
-        <div style={{ textAlign: 'center', marginBottom: '35px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '15px' }}>🛒</div>
-          <h1 style={{ 
-            color: '#1a1a1a',
-            fontSize: '24px',
-            fontWeight: '600',
-            marginBottom: '8px',
-            margin: '0'
-          }}>
-            מערכת ניהול הזמנות
-          </h1>
-          <p style={{ 
-            color: '#666',
-            fontSize: '14px',
-            margin: '0'
-          }}>
-            Kiosk Order Management System
-          </p>
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '1rem',
+    },
+    card: {
+      backgroundColor: 'white',
+      padding: '2.5rem',
+      borderRadius: '16px',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+      width: '100%',
+      maxWidth: '420px',
+    },
+    logo: {
+      textAlign: 'center' as const,
+      marginBottom: '2rem',
+    },
+    logoIcon: {
+      fontSize: '4rem',
+      marginBottom: '0.5rem',
+    },
+    title: {
+      fontSize: '2rem',
+      fontWeight: 'bold',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      marginBottom: '0.5rem',
+    },
+    subtitle: {
+      color: '#7f8c8d',
+      fontSize: '0.9rem',
+    },
+    form: {
+      marginTop: '2rem',
+    },
+    inputGroup: {
+      marginBottom: '1.2rem',
+    },
+    label: {
+      display: 'block',
+      marginBottom: '0.5rem',
+      color: '#2c3e50',
+      fontSize: '0.9rem',
+      fontWeight: '600',
+    },
+    input: {
+      width: '100%',
+      padding: '0.9rem',
+      border: '2px solid #ecf0f1',
+      borderRadius: '8px',
+      fontSize: '1rem',
+      transition: 'all 0.3s',
+      outline: 'none',
+    },
+    inputFocus: {
+      borderColor: '#667eea',
+      boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+    },
+    button: {
+      width: '100%',
+      padding: '1rem',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      fontSize: '1.1rem',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+      marginTop: '1.5rem',
+    },
+    buttonHover: {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 10px 20px rgba(102, 126, 234, 0.3)',
+    },
+    buttonDisabled: {
+      opacity: 0.7,
+      cursor: 'not-allowed',
+    },
+    error: {
+      backgroundColor: '#fee',
+      color: '#c33',
+      padding: '0.75rem',
+      borderRadius: '6px',
+      fontSize: '0.9rem',
+      marginBottom: '1rem',
+      textAlign: 'center' as const,
+      border: '1px solid #fcc',
+    },
+    info: {
+      backgroundColor: '#e3f2fd',
+      color: '#1976d2',
+      padding: '0.75rem',
+      borderRadius: '6px',
+      fontSize: '0.9rem',
+      marginBottom: '1rem',
+      textAlign: 'center' as const,
+      border: '1px solid #90caf9',
+    },
+    forgotPassword: {
+      textAlign: 'center' as const,
+      marginTop: '1.5rem',
+    },
+    link: {
+      color: '#667eea',
+      textDecoration: 'none',
+      fontSize: '0.9rem',
+      cursor: 'pointer',
+      transition: 'color 0.3s',
+    },
+    linkHover: {
+      color: '#764ba2',
+      textDecoration: 'underline',
+    },
+    divider: {
+      textAlign: 'center' as const,
+      margin: '1.5rem 0',
+      position: 'relative' as const,
+      color: '#95a5a6',
+    },
+    dividerLine: {
+      position: 'absolute' as const,
+      top: '50%',
+      left: 0,
+      right: 0,
+      height: '1px',
+      backgroundColor: '#ecf0f1',
+    },
+    dividerText: {
+      position: 'relative' as const,
+      backgroundColor: 'white',
+      padding: '0 1rem',
+      fontSize: '0.85rem',
+    },
+    footer: {
+      textAlign: 'center' as const,
+      marginTop: '2rem',
+      paddingTop: '1.5rem',
+      borderTop: '1px solid #ecf0f1',
+      color: '#95a5a6',
+      fontSize: '0.85rem',
+    },
+  };
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <div style={styles.logo}>
+          <div style={styles.logoIcon}>🏪</div>
+          <h1 style={styles.title}>מערכת ניהול קיוסק</h1>
+          <p style={styles.subtitle}>התחבר כדי להמשיך</p>
         </div>
 
-        {/* Error Message */}
         {error && (
-          <div style={{
-            padding: '12px 16px',
-            marginBottom: '20px',
-            borderRadius: '8px',
-            backgroundColor: '#fee',
-            color: '#c00',
-            fontSize: '14px',
-            borderRight: '4px solid #c00'
-          }}>
+          <div style={error.includes('אימייל') ? styles.info : styles.error}>
             {error}
           </div>
         )}
 
-        {/* Success Message */}
-        {success && (
-          <div style={{
-            padding: '12px 16px',
-            marginBottom: '20px',
-            borderRadius: '8px',
-            backgroundColor: '#e6f7e6',
-            color: '#2e7d2e',
-            fontSize: '14px',
-            borderRight: '4px solid #4CAF50'
-          }}>
-            {success}
-          </div>
-        )}
+        {!showForgotPassword ? (
+          <form onSubmit={handleLogin} style={styles.form}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>כתובת אימייל</label>
+              <input
+                type="email"
+                style={styles.input}
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#ecf0f1';
+                  e.target.style.boxShadow = 'none';
+                }}
+                required
+                disabled={loading}
+              />
+            </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#444',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}>
-              כתובת אימייל
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="your@email.com"
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '15px',
-                direction: 'ltr',
-                outline: 'none',
-                transition: 'all 0.2s',
-                backgroundColor: loading ? '#f5f5f5' : 'white',
-                cursor: loading ? 'not-allowed' : 'text'
-              }}
-              onFocus={(e) => {
-                if (!loading) e.target.style.borderColor = '#4CAF50';
-              }}
-              onBlur={(e) => e.target.style.borderColor = '#ddd'}
-            />
-          </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>סיסמה</label>
+              <input
+                type="password"
+                style={styles.input}
+                placeholder="הכנס סיסמה"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#667eea';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#ecf0f1';
+                  e.target.style.boxShadow = 'none';
+                }}
+                required
+                disabled={loading}
+              />
+            </div>
 
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#444',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}>
-              סיסמה
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              minLength={6}
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '15px',
-                direction: 'ltr',
-                outline: 'none',
-                transition: 'all 0.2s',
-                backgroundColor: loading ? '#f5f5f5' : 'white',
-                cursor: loading ? 'not-allowed' : 'text'
-              }}
-              onFocus={(e) => {
-                if (!loading) e.target.style.borderColor = '#4CAF50';
-              }}
-              onBlur={(e) => e.target.style.borderColor = '#ddd'}
-            />
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '14px',
-              backgroundColor: loading ? '#ccc' : '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '500',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'background-color 0.2s',
-              marginBottom: '16px'
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) e.currentTarget.style.backgroundColor = '#45a049';
-            }}
-            onMouseLeave={(e) => {
-              if (!loading) e.currentTarget.style.backgroundColor = '#4CAF50';
-            }}
-          >
-            {loading ? '⏳ מעבד...' : (isSignUp ? '📝 הרשמה' : '🔐 התחברות')}
-          </button>
-
-          {/* Secondary Actions */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            paddingTop: '16px',
-            borderTop: '1px solid #eee'
-          }}>
             <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError(null);
-                setSuccess(null);
+              type="submit"
+              style={{
+                ...styles.button,
+                ...(loading ? styles.buttonDisabled : {}),
               }}
               disabled={loading}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: loading ? '#999' : '#4CAF50',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                padding: '4px 0'
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 10px 20px rgba(102, 126, 234, 0.3)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
               }}
             >
-              {isSignUp ? '← חזרה להתחברות' : '➕ יצירת חשבון חדש'}
+              {loading ? '⏳ מתחבר...' : '🔐 התחבר'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleForgotPassword} style={styles.form}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>הכנס את כתובת האימייל שלך</label>
+              <input
+                type="email"
+                style={styles.input}
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              style={{
+                ...styles.button,
+                ...(loading ? styles.buttonDisabled : {}),
+              }}
+              disabled={loading}
+            >
+              {loading ? 'שולח...' : 'שלח קישור לאיפוס סיסמה'}
             </button>
 
-            {!isSignUp && (
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                disabled={loading}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: loading ? '#999' : '#666',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '13px',
-                  padding: '4px 0'
+            <div style={styles.forgotPassword}>
+              <a
+                onClick={() => setShowForgotPassword(false)}
+                style={styles.link}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#764ba2';
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#667eea';
+                  e.currentTarget.style.textDecoration = 'none';
                 }}
               >
-                שכחתי סיסמה
-              </button>
-            )}
-          </div>
-        </form>
+                חזור להתחברות
+              </a>
+            </div>
+          </form>
+        )}
 
-        {/* Test Credentials Info */}
-        <div style={{
-          marginTop: '30px',
-          padding: '16px',
-          backgroundColor: '#f0f8ff',
-          borderRadius: '8px',
-          border: '1px solid #b3d9ff',
-          fontSize: '13px',
-          color: '#004085'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            marginBottom: '8px',
-            fontWeight: '600'
-          }}>
-            <span style={{ marginLeft: '6px' }}>🔑</span>
-            <span>פרטי גישה לבדיקה:</span>
-          </div>
-          <div style={{ 
-            fontFamily: 'monospace',
-            backgroundColor: 'white',
-            padding: '8px',
-            borderRadius: '4px',
-            marginTop: '8px',
-            direction: 'ltr'
-          }}>
-            <div>Email: admin@test.com</div>
-            <div>Password: Test1234!</div>
-          </div>
-          <div style={{ 
-            marginTop: '10px',
-            fontSize: '12px',
-            opacity: '0.8'
-          }}>
-            💡 טיפ: אם המשתמש לא קיים, השתמש בכפתור "יצירת חשבון חדש"
-          </div>
-        </div>
+        {!showForgotPassword && (
+          <>
+            <div style={styles.forgotPassword}>
+              <a
+                onClick={() => setShowForgotPassword(true)}
+                style={styles.link}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#764ba2';
+                  e.currentTarget.style.textDecoration = 'underline';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#667eea';
+                  e.currentTarget.style.textDecoration = 'none';
+                }}
+              >
+                שכחת סיסמה?
+              </a>
+            </div>
 
-        {/* System Status */}
-        <div style={{
-          marginTop: '20px',
-          padding: '12px',
-          backgroundColor: '#f9f9f9',
-          borderRadius: '8px',
-          fontSize: '11px',
-          color: '#666',
-          textAlign: 'center'
-        }}>
-          <div style={{ marginBottom: '4px' }}>
-            🟢 סטטוס מערכת: {process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}
-          </div>
-          <div>
-            {process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ מחובר ל-Supabase' : '❌ לא מחובר ל-Supabase'}
-          </div>
-        </div>
+            <div style={styles.footer}>
+              <p>🔒 מערכת מאובטחת</p>
+              <p style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+                גישה למורשים בלבד
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

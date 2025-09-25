@@ -44,6 +44,7 @@ export default function Navigation() {
     { path: '/products', label: '📦 מוצרים', icon: '📦' },
     { path: '/customers', label: '👥 לקוחות', icon: '👥' },
     { path: '/reports', label: '📊 דוחות', icon: '📊' },
+    { path: '/settings', label: '⚙️ הגדרות', icon: '⚙️' },
   ];
 
   return (

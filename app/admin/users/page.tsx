@@ -310,4 +310,155 @@ export default function AdminUsersPage() {
               </div>
 
               <div>
-                <label styl
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  שם מלא *
+                </label>
+                <input
+                  type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '16px',
+                    borderRadius: '5px',
+                    border: '1px solid #ddd',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  טלפון
+                </label>
+                <input
+                  type="tel"
+                  value={newUser.phone}
+                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '16px',
+                    borderRadius: '5px',
+                    border: '1px solid #ddd',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  תפקיד *
+                </label>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '16px',
+                    borderRadius: '5px',
+                    border: '1px solid #ddd'
+                  }}
+                >
+                  {roles.map(role => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                marginTop: '20px',
+                padding: '10px 30px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              {saving ? 'יוצר משתמש...' : 'צור משתמש'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          backgroundColor: 'white',
+          boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+        }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f5f5f5' }}>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>שם</th>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>טלפון</th>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>תפקיד</th>
+              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #ddd' }}>נוצר ב</th>
+              <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>פעולות</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: '12px' }}>{user.profile?.name || 'ללא שם'}</td>
+                <td style={{ padding: '12px' }}>{user.profile?.phone || '-'}</td>
+                <td style={{ padding: '12px' }}>
+                  <select
+                    value={user.profile?.role || 'VIEWER'}
+                    onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                    disabled={user.id === currentUserId}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '5px',
+                      border: '1px solid #ddd',
+                      backgroundColor: roles.find(r => r.value === user.profile?.role)?.color || '#95a5a6',
+                      color: 'white',
+                      cursor: user.id === currentUserId ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {roles.map(role => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ padding: '12px' }}>
+                  {user.created_at ? new Date(user.created_at).toLocaleDateString('he-IL') : '-'}
+                </td>
+                <td style={{ padding: '12px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleDeleteUser(user.id)}
+                    disabled={user.id === currentUserId}
+                    style={{
+                      padding: '5px 15px',
+                      backgroundColor: '#e74c3c',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: user.id === currentUserId ? 'not-allowed' : 'pointer',
+                      opacity: user.id === currentUserId ? 0.5 : 1
+                    }}
+                  >
+                    מחק
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

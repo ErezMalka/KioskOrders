@@ -2,8 +2,166 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import AddUser from '@/components/AddUser'
 
+// קומפוננטת AddUser מובנית בתוך הקובץ
+function AddUser({ onSuccess }: { onSuccess?: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    phone: ''
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.full_name,
+            phone: formData.phone
+          }
+        }
+      })
+
+      if (error) throw error
+
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      if (data.user && (formData.full_name || formData.phone)) {
+        await supabase
+          .from('profiles')
+          .update({
+            full_name: formData.full_name,
+            phone: formData.phone,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.user.id)
+      }
+
+      setMessage({
+        type: 'success',
+        text: `✅ המשתמש ${formData.email} נוצר בהצלחה!`
+      })
+
+      setFormData({
+        email: '',
+        password: '',
+        full_name: '',
+        phone: ''
+      })
+
+      if (onSuccess) onSuccess()
+
+    } catch (error: any) {
+      console.error('Error:', error)
+      setMessage({
+        type: 'error',
+        text: error.message || 'שגיאה ביצירת המשתמש'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-6">
+      <h2 className="text-2xl font-bold mb-6">הוספת משתמש חדש</h2>
+      
+      {message && (
+        <div className={`mb-4 p-3 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-100 text-green-800 border border-green-300' 
+            : 'bg-red-100 text-red-800 border border-red-300'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              אימייל <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="email"
+              required
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="user@example.com"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              סיסמה <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="מינימום 6 תווים"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              שם מלא
+            </label>
+            <input
+              type="text"
+              value={formData.full_name}
+              onChange={(e) => setFormData({...formData, full_name: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="ישראל ישראלי"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              טלפון
+            </label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="050-1234567"
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? 'מוסיף משתמש...' : 'הוסף משתמש'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ממשק למשתמש
 interface User {
   id: string
   email: string
@@ -14,12 +172,12 @@ interface User {
   updated_at: string
 }
 
+// קומפוננטה ראשית
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
 
-  // טעינת רשימת המשתמשים
   const fetchUsers = async () => {
     try {
       setLoading(true)
@@ -37,25 +195,20 @@ export default function UsersPage() {
     }
   }
 
-  // טעינה ראשונית
   useEffect(() => {
     fetchUsers()
   }, [])
 
-  // מחיקת משתמש
   const handleDelete = async (userId: string, userEmail: string) => {
     if (!confirm(`האם אתה בטוח שברצונך למחוק את ${userEmail}?`)) return
 
     try {
-      // מחק מ-profiles
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
         .eq('id', userId)
 
       if (profileError) throw profileError
-
-      // רענן את הרשימה
       fetchUsers()
     } catch (error) {
       console.error('Error deleting user:', error)
@@ -63,7 +216,6 @@ export default function UsersPage() {
     }
   }
 
-  // פורמט תאריך
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('he-IL', {
       day: '2-digit',
@@ -74,7 +226,6 @@ export default function UsersPage() {
     })
   }
 
-  // מיפוי תפקידים לעברית
   const roleLabels: Record<string, string> = {
     'user': 'משתמש',
     'admin': 'מנהל',
@@ -88,7 +239,6 @@ export default function UsersPage() {
 
   return (
     <div className="container mx-auto p-6">
-      {/* כותרת ולחצן הוספה */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">ניהול משתמשים</h1>
         <button
@@ -109,7 +259,6 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {/* טופס הוספת משתמש */}
       {showAddForm && (
         <div className="mb-8">
           <AddUser 
@@ -121,7 +270,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* טבלת משתמשים */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
@@ -184,7 +332,6 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* סטטיסטיקה */}
       <div className="mt-6 flex gap-4">
         <div className="bg-blue-50 rounded-lg p-4 flex-1">
           <div className="text-blue-600 text-sm">סה"כ משתמשים</div>

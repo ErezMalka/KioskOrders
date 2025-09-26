@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -17,6 +18,7 @@ export default function UserManagement() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentSession, setCurrentSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -37,6 +39,10 @@ export default function UserManagement() {
 
   const checkPermissions = async () => {
     try {
+      // שמור את ה-session הנוכחי
+      const { data: { session } } = await supabase.auth.getSession();
+      setCurrentSession(session);
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
@@ -92,8 +98,21 @@ export default function UserManagement() {
     setCreatedUserDetails(null);
     
     try {
-      // יצירת משתמש דרך Supabase Client
-      const { data, error } = await supabase.auth.signUp({
+      // יצירת Supabase client חדש לצורך יצירת המשתמש
+      // כך לא נשפיע על ה-session הנוכחי
+      const tempSupabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: {
+            persistSession: false, // חשוב! לא לשמור את ה-session
+            autoRefreshToken: false,
+          }
+        }
+      );
+
+      // יצירת משתמש דרך client זמני
+      const { data, error } = await tempSupabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
         options: {
@@ -101,15 +120,14 @@ export default function UserManagement() {
             name: newUser.name,
             phone: newUser.phone,
             role: newUser.role
-          },
-          emailRedirectTo: window.location.origin
+          }
         }
       });
 
       if (error) throw error;
 
       if (data.user) {
-        // יצירת פרופיל
+        // יצירת פרופיל - משתמש ב-client המקורי
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -118,11 +136,34 @@ export default function UserManagement() {
             name: newUser.name,
             phone: newUser.phone,
             role: newUser.role,
-            organization_id: currentUser.organization_id || currentUser.id
+            organization_id: currentUser.organization_id || currentUser.id,
+            created_at: new Date().toISOString()
           });
 
         if (profileError) {
           console.error('Profile error:', profileError);
+          // אם הפרופיל לא נוצר, ננסה לעדכן במקום ליצור
+          await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              email: newUser.email,
+              name: newUser.name,
+              phone: newUser.phone,
+              role: newUser.role,
+              organization_id: currentUser.organization_id || currentUser.id
+            });
+        }
+
+        // יצירת ארגון אם צריך
+        if (newUser.role === 'ADMIN' || newUser.role === 'SUPER_ADMIN') {
+          await supabase
+            .from('organizations')
+            .upsert({
+              id: data.user.id,
+              name: `${newUser.name} - ארגון`,
+              contact_email: newUser.email
+            });
         }
 
         // הצלחה - הצג את הפרטים
@@ -139,27 +180,27 @@ export default function UserManagement() {
         setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
         
         // רענן רשימת משתמשים
-        fetchUsers();
+        await fetchUsers();
+        
+        // וודא שאנחנו עדיין מחוברים כסופר אדמין
+        const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
+        if (!currentAuthUser || currentAuthUser.id !== currentUser.id) {
+          console.log('Session was lost, restoring...');
+          // אם ה-session אבד, נסה להחזיר
+          if (currentSession) {
+            await supabase.auth.setSession({
+              access_token: currentSession.access_token,
+              refresh_token: currentSession.refresh_token
+            });
+          }
+        }
       }
       
     } catch (error: any) {
       console.error('Error creating user:', error);
       
-      // טיפול בשגיאות נפוצות
       if (error.message?.includes('already registered')) {
         setMessage('❌ משתמש עם אימייל זה כבר קיים');
-      } else if (error.message?.includes('confirmation')) {
-        // אם יש בעיה עם אישור אימייל, עדיין הצג הצלחה
-        setCreatedUserDetails({
-          email: newUser.email,
-          password: newUser.password,
-          name: newUser.name,
-          role: newUser.role,
-          note: 'הערה: ייתכן שיידרש אישור אימייל'
-        });
-        setMessage('✅ המשתמש נוצר! אם יש אישור אימייל - המשתמש יצטרך לאשר');
-        setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
-        fetchUsers();
       } else {
         setMessage(`❌ שגיאה: ${error.message}`);
       }
@@ -169,6 +210,12 @@ export default function UserManagement() {
   };
 
   const updateUserRole = async (userId: string, newRole: string) => {
+    if (userId === currentUser?.id && newRole !== 'SUPER_ADMIN') {
+      if (!confirm('אתה עומד לשנות את התפקיד שלך. האם אתה בטוח?')) {
+        return;
+      }
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
@@ -182,6 +229,32 @@ export default function UserManagement() {
       setTimeout(() => setMessage(''), 3000);
     } catch (error: any) {
       setMessage(`❌ שגיאה: ${error.message}`);
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (userId === currentUser?.id) {
+      alert('לא ניתן למחוק את המשתמש שלך');
+      return;
+    }
+
+    if (!confirm('האם אתה בטוח שברצונך למחוק משתמש זה? פעולה זו לא ניתנת לביטול.')) {
+      return;
+    }
+
+    try {
+      // מחק רק מטבלת profiles - המשתמש עדיין יוכל להתחבר אבל לא יהיה לו פרופיל
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+      
+      setMessage('✅ המשתמש נמחק');
+      fetchUsers();
+    } catch (error: any) {
+      setMessage(`❌ שגיאה במחיקת משתמש: ${error.message}`);
     }
   };
 
@@ -210,6 +283,15 @@ export default function UserManagement() {
       fontWeight: 'bold',
       color: '#333',
     },
+    stats: {
+      backgroundColor: '#f5f5f5',
+      padding: '1rem',
+      borderRadius: '8px',
+      marginBottom: '1rem',
+      display: 'flex',
+      gap: '2rem',
+      flexWrap: 'wrap' as const,
+    },
     button: {
       padding: '0.75rem 1.5rem',
       backgroundColor: '#4CAF50',
@@ -228,6 +310,16 @@ export default function UserManagement() {
       borderRadius: '4px',
       cursor: 'pointer',
       fontSize: '0.9rem',
+    },
+    deleteButton: {
+      padding: '0.5rem 1rem',
+      backgroundColor: '#f44336',
+      color: 'white',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontSize: '0.85rem',
+      marginLeft: '0.5rem',
     },
     table: {
       width: '100%',
@@ -320,14 +412,6 @@ export default function UserManagement() {
       fontSize: '0.8rem',
       marginRight: '0.5rem',
     },
-    warningBox: {
-      backgroundColor: '#fff3cd',
-      border: '1px solid #ffc107',
-      borderRadius: '6px',
-      padding: '1rem',
-      marginBottom: '1rem',
-      color: '#856404',
-    },
   };
 
   const getRoleColor = (role: string) => {
@@ -364,6 +448,15 @@ export default function UserManagement() {
     );
   }
 
+  // סטטיסטיקות משתמשים
+  const userStats = {
+    total: users.length,
+    superAdmins: users.filter(u => u.role === 'SUPER_ADMIN').length,
+    admins: users.filter(u => u.role === 'ADMIN').length,
+    agents: users.filter(u => u.role === 'SALES_AGENT').length,
+    viewers: users.filter(u => u.role === 'VIEWER').length,
+  };
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -388,6 +481,14 @@ export default function UserManagement() {
         </div>
       )}
 
+      <div style={styles.stats}>
+        <div><strong>סה"כ משתמשים:</strong> {userStats.total}</div>
+        <div><strong>סופר אדמינים:</strong> {userStats.superAdmins}</div>
+        <div><strong>מנהלים:</strong> {userStats.admins}</div>
+        <div><strong>סוכנים:</strong> {userStats.agents}</div>
+        <div><strong>צופים:</strong> {userStats.viewers}</div>
+      </div>
+
       <div style={{ overflowX: 'auto' }}>
         <table style={styles.table}>
           <thead>
@@ -397,6 +498,7 @@ export default function UserManagement() {
               <th style={styles.th}>טלפון</th>
               <th style={styles.th}>תפקיד</th>
               <th style={styles.th}>נוצר בתאריך</th>
+              <th style={styles.th}>פעולות</th>
             </tr>
           </thead>
           <tbody>
@@ -431,6 +533,16 @@ export default function UserManagement() {
                 </td>
                 <td style={styles.td}>
                   {new Date(user.created_at).toLocaleDateString('he-IL')}
+                </td>
+                <td style={styles.td}>
+                  {currentUser?.id !== user.id && (
+                    <button
+                      onClick={() => deleteUser(user.id)}
+                      style={styles.deleteButton}
+                    >
+                      🗑️ מחק
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -475,11 +587,6 @@ export default function UserManagement() {
                     <strong>תפקיד:</strong> {getRoleText(createdUserDetails.role)}
                   </div>
                 </div>
-                {createdUserDetails.note && (
-                  <div style={{ ...styles.warningBox, marginTop: '1rem' }}>
-                    ⚠️ {createdUserDetails.note}
-                  </div>
-                )}
                 <button
                   onClick={() => {
                     setCreatedUserDetails(null);

@@ -51,12 +51,13 @@ export default function Navigation() {
     return null;
   }
 
-  // Base menu items
+  // Base menu items - כולל קטגוריות
   let menuItems = [
     { path: '/dashboard', label: '🏠 לוח בקרה', icon: '🏠' },
     { path: '/orders/create', label: '➕ הזמנה חדשה', icon: '➕' },
     { path: '/orders', label: '📋 הזמנות', icon: '📋' },
     { path: '/products', label: '📦 מוצרים', icon: '📦' },
+    { path: '/categories', label: '📁 קטגוריות', icon: '📁' },
     { path: '/customers', label: '👥 לקוחות', icon: '👥' },
     { path: '/reports', label: '📊 דוחות', icon: '📊' },
     { path: '/settings', label: '⚙️ הגדרות', icon: '⚙️' },

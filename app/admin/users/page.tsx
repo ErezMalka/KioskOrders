@@ -18,13 +18,13 @@ export default function UserManagement() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [currentSession, setCurrentSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [createdUserDetails, setCreatedUserDetails] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState('');
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -39,10 +39,6 @@ export default function UserManagement() {
 
   const checkPermissions = async () => {
     try {
-      // שמור את ה-session הנוכחי
-      const { data: { session } } = await supabase.auth.getSession();
-      setCurrentSession(session);
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
@@ -62,7 +58,7 @@ export default function UserManagement() {
       }
 
       setCurrentUser(profile);
-      fetchUsers();
+      await fetchUsers();
     } catch (error) {
       console.error('Error:', error);
       router.push('/dashboard');
@@ -72,13 +68,18 @@ export default function UserManagement() {
   };
 
   const fetchUsers = async () => {
+    console.log('Fetching users...');
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setUsers(data);
+    if (error) {
+      console.error('Error fetching users:', error);
+      setMessage(`❌ שגיאה בטעינת משתמשים: ${error.message}`);
+    } else {
+      console.log('Users loaded:', data?.length);
+      setUsers(data || []);
     }
   };
 
@@ -96,23 +97,25 @@ export default function UserManagement() {
     setMessage('');
     setCreating(true);
     setCreatedUserDetails(null);
+    setDebugInfo('');
     
     try {
-      // יצירת Supabase client חדש לצורך יצירת המשתמש
-      // כך לא נשפיע על ה-session הנוכחי
+      console.log('Creating user with:', newUser);
+      
+      // יצירת Supabase client חדש
       const tempSupabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
           auth: {
-            persistSession: false, // חשוב! לא לשמור את ה-session
+            persistSession: false,
             autoRefreshToken: false,
           }
         }
       );
 
-      // יצירת משתמש דרך client זמני
-      const { data, error } = await tempSupabase.auth.signUp({
+      // Step 1: יצירת משתמש
+      const { data: authData, error: authError } = await tempSupabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
         options: {
@@ -124,98 +127,126 @@ export default function UserManagement() {
         }
       });
 
-      if (error) throw error;
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw authError;
+      }
 
-      if (data.user) {
-        // יצירת פרופיל - משתמש ב-client המקורי
-        const { error: profileError } = await supabase
+      if (!authData.user) {
+        throw new Error('לא נוצר משתמש');
+      }
+
+      console.log('User created in auth:', authData.user.id);
+      setDebugInfo(prev => prev + `\n✅ משתמש נוצר ב-auth: ${authData.user.id}`);
+
+      // Step 2: המתן רגע לפני יצירת הפרופיל
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Step 3: יצירת פרופיל - נסה insert ואז upsert אם נכשל
+      console.log('Creating profile...');
+      const profileData = {
+        id: authData.user.id,
+        email: newUser.email,
+        name: newUser.name,
+        phone: newUser.phone || null,
+        role: newUser.role,
+        organization_id: currentUser?.organization_id || currentUser?.id,
+        created_at: new Date().toISOString()
+      };
+
+      const { data: profileResult, error: profileError } = await supabase
+        .from('profiles')
+        .insert(profileData)
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Profile insert error:', profileError);
+        setDebugInfo(prev => prev + `\n⚠️ שגיאה ביצירת פרופיל: ${profileError.message}`);
+        
+        // נסה upsert
+        console.log('Trying upsert...');
+        const { data: upsertResult, error: upsertError } = await supabase
+          .from('profiles')
+          .upsert(profileData)
+          .select()
+          .single();
+
+        if (upsertError) {
+          console.error('Profile upsert error:', upsertError);
+          setDebugInfo(prev => prev + `\n❌ שגיאה ב-upsert: ${upsertError.message}`);
+        } else {
+          console.log('Profile created via upsert:', upsertResult);
+          setDebugInfo(prev => prev + `\n✅ פרופיל נוצר דרך upsert`);
+        }
+      } else {
+        console.log('Profile created:', profileResult);
+        setDebugInfo(prev => prev + `\n✅ פרופיל נוצר בהצלחה`);
+      }
+
+      // Step 4: בדוק שהפרופיל נוצר
+      const { data: checkProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (checkError || !checkProfile) {
+        console.error('Profile not found after creation:', checkError);
+        setDebugInfo(prev => prev + `\n❌ הפרופיל לא נמצא אחרי היצירה`);
+        
+        // נסיון אחרון - צור ישירות
+        const { error: finalError } = await supabase
           .from('profiles')
           .insert({
-            id: data.user.id,
+            id: authData.user.id,
             email: newUser.email,
             name: newUser.name,
-            phone: newUser.phone,
-            role: newUser.role,
-            organization_id: currentUser.organization_id || currentUser.id,
-            created_at: new Date().toISOString()
+            role: newUser.role
           });
-
-        if (profileError) {
-          console.error('Profile error:', profileError);
-          // אם הפרופיל לא נוצר, ננסה לעדכן במקום ליצור
-          await supabase
-            .from('profiles')
-            .upsert({
-              id: data.user.id,
-              email: newUser.email,
-              name: newUser.name,
-              phone: newUser.phone,
-              role: newUser.role,
-              organization_id: currentUser.organization_id || currentUser.id
-            });
+          
+        if (finalError) {
+          console.error('Final attempt failed:', finalError);
         }
-
-        // יצירת ארגון אם צריך
-        if (newUser.role === 'ADMIN' || newUser.role === 'SUPER_ADMIN') {
-          await supabase
-            .from('organizations')
-            .upsert({
-              id: data.user.id,
-              name: `${newUser.name} - ארגון`,
-              contact_email: newUser.email
-            });
-        }
-
-        // הצלחה - הצג את הפרטים
-        setCreatedUserDetails({
-          email: newUser.email,
-          password: newUser.password,
-          name: newUser.name,
-          role: newUser.role
-        });
-        
-        setMessage('✅ המשתמש נוצר בהצלחה!');
-        
-        // אפס טופס
-        setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
-        
-        // רענן רשימת משתמשים
-        await fetchUsers();
-        
-        // וודא שאנחנו עדיין מחוברים כסופר אדמין
-        const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
-        if (!currentAuthUser || currentAuthUser.id !== currentUser.id) {
-          console.log('Session was lost, restoring...');
-          // אם ה-session אבד, נסה להחזיר
-          if (currentSession) {
-            await supabase.auth.setSession({
-              access_token: currentSession.access_token,
-              refresh_token: currentSession.refresh_token
-            });
-          }
-        }
+      } else {
+        console.log('Profile verified:', checkProfile);
+        setDebugInfo(prev => prev + `\n✅ פרופיל אומת: ${checkProfile.email}`);
       }
+
+      // Step 5: רענן את רשימת המשתמשים
+      console.log('Refreshing users list...');
+      await fetchUsers();
+
+      // הצלחה - הצג את הפרטים
+      setCreatedUserDetails({
+        email: newUser.email,
+        password: newUser.password,
+        name: newUser.name,
+        role: newUser.role,
+        debug: debugInfo
+      });
+      
+      setMessage('✅ המשתמש נוצר בהצלחה!');
+      setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
       
     } catch (error: any) {
       console.error('Error creating user:', error);
       
       if (error.message?.includes('already registered')) {
         setMessage('❌ משתמש עם אימייל זה כבר קיים');
+      } else if (error.message?.includes('duplicate key')) {
+        setMessage('❌ משתמש זה כבר קיים במערכת');
       } else {
         setMessage(`❌ שגיאה: ${error.message}`);
       }
+      
+      setDebugInfo(prev => prev + `\n❌ שגיאה כללית: ${error.message}`);
     } finally {
       setCreating(false);
     }
   };
 
   const updateUserRole = async (userId: string, newRole: string) => {
-    if (userId === currentUser?.id && newRole !== 'SUPER_ADMIN') {
-      if (!confirm('אתה עומד לשנות את התפקיד שלך. האם אתה בטוח?')) {
-        return;
-      }
-    }
-
     try {
       const { error } = await supabase
         .from('profiles')
@@ -232,35 +263,16 @@ export default function UserManagement() {
     }
   };
 
-  const deleteUser = async (userId: string) => {
-    if (userId === currentUser?.id) {
-      alert('לא ניתן למחוק את המשתמש שלך');
-      return;
-    }
-
-    if (!confirm('האם אתה בטוח שברצונך למחוק משתמש זה? פעולה זו לא ניתנת לביטול.')) {
-      return;
-    }
-
-    try {
-      // מחק רק מטבלת profiles - המשתמש עדיין יוכל להתחבר אבל לא יהיה לו פרופיל
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userId);
-
-      if (error) throw error;
-      
-      setMessage('✅ המשתמש נמחק');
-      fetchUsers();
-    } catch (error: any) {
-      setMessage(`❌ שגיאה במחיקת משתמש: ${error.message}`);
-    }
-  };
-
   const copyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text);
     setMessage(`📋 ${type} הועתק ללוח`);
+    setTimeout(() => setMessage(''), 2000);
+  };
+
+  const refreshList = async () => {
+    setMessage('🔄 מרענן רשימה...');
+    await fetchUsers();
+    setMessage('✅ הרשימה עודכנה');
     setTimeout(() => setMessage(''), 2000);
   };
 
@@ -283,15 +295,6 @@ export default function UserManagement() {
       fontWeight: 'bold',
       color: '#333',
     },
-    stats: {
-      backgroundColor: '#f5f5f5',
-      padding: '1rem',
-      borderRadius: '8px',
-      marginBottom: '1rem',
-      display: 'flex',
-      gap: '2rem',
-      flexWrap: 'wrap' as const,
-    },
     button: {
       padding: '0.75rem 1.5rem',
       backgroundColor: '#4CAF50',
@@ -310,16 +313,6 @@ export default function UserManagement() {
       borderRadius: '4px',
       cursor: 'pointer',
       fontSize: '0.9rem',
-    },
-    deleteButton: {
-      padding: '0.5rem 1rem',
-      backgroundColor: '#f44336',
-      color: 'white',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      fontSize: '0.85rem',
-      marginLeft: '0.5rem',
     },
     table: {
       width: '100%',
@@ -402,15 +395,14 @@ export default function UserManagement() {
       marginTop: '1rem',
       fontFamily: 'monospace',
     },
-    copyButton: {
-      padding: '0.25rem 0.5rem',
-      backgroundColor: '#607d8b',
-      color: 'white',
-      border: 'none',
+    debugBox: {
+      backgroundColor: '#f0f0f0',
+      padding: '0.5rem',
       borderRadius: '4px',
-      cursor: 'pointer',
+      marginTop: '0.5rem',
       fontSize: '0.8rem',
-      marginRight: '0.5rem',
+      fontFamily: 'monospace',
+      whiteSpace: 'pre-wrap' as const,
     },
   };
 
@@ -448,25 +440,21 @@ export default function UserManagement() {
     );
   }
 
-  // סטטיסטיקות משתמשים
-  const userStats = {
-    total: users.length,
-    superAdmins: users.filter(u => u.role === 'SUPER_ADMIN').length,
-    admins: users.filter(u => u.role === 'ADMIN').length,
-    agents: users.filter(u => u.role === 'SALES_AGENT').length,
-    viewers: users.filter(u => u.role === 'VIEWER').length,
-  };
-
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h1 style={styles.title}>🔐 ניהול משתמשים</h1>
-        <button onClick={() => setShowAddUser(true)} style={styles.button}>
-          ➕ הוסף משתמש חדש
-        </button>
+        <h1 style={styles.title}>🔐 ניהול משתמשים ({users.length})</h1>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button onClick={refreshList} style={{ ...styles.button, backgroundColor: '#ff9800' }}>
+            🔄 רענן רשימה
+          </button>
+          <button onClick={() => setShowAddUser(true)} style={styles.button}>
+            ➕ הוסף משתמש
+          </button>
+        </div>
       </div>
 
-      {message && !createdUserDetails && (
+      {message && (
         <div style={{
           padding: '1rem',
           borderRadius: '6px',
@@ -475,19 +463,17 @@ export default function UserManagement() {
           fontWeight: 'bold',
           backgroundColor: message.includes('✅') || message.includes('📋') ? '#d4edda' : '#f8d7da',
           color: message.includes('✅') || message.includes('📋') ? '#155724' : '#721c24',
-          border: message.includes('✅') || message.includes('📋') ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
         }}>
           {message}
         </div>
       )}
 
-      <div style={styles.stats}>
-        <div><strong>סה"כ משתמשים:</strong> {userStats.total}</div>
-        <div><strong>סופר אדמינים:</strong> {userStats.superAdmins}</div>
-        <div><strong>מנהלים:</strong> {userStats.admins}</div>
-        <div><strong>סוכנים:</strong> {userStats.agents}</div>
-        <div><strong>צופים:</strong> {userStats.viewers}</div>
-      </div>
+      {debugInfo && (
+        <div style={styles.debugBox}>
+          <strong>Debug Info:</strong>
+          {debugInfo}
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={styles.table}>
@@ -497,8 +483,7 @@ export default function UserManagement() {
               <th style={styles.th}>אימייל</th>
               <th style={styles.th}>טלפון</th>
               <th style={styles.th}>תפקיד</th>
-              <th style={styles.th}>נוצר בתאריך</th>
-              <th style={styles.th}>פעולות</th>
+              <th style={styles.th}>ID</th>
             </tr>
           </thead>
           <tbody>
@@ -531,18 +516,8 @@ export default function UserManagement() {
                     </select>
                   )}
                 </td>
-                <td style={styles.td}>
-                  {new Date(user.created_at).toLocaleDateString('he-IL')}
-                </td>
-                <td style={styles.td}>
-                  {currentUser?.id !== user.id && (
-                    <button
-                      onClick={() => deleteUser(user.id)}
-                      style={styles.deleteButton}
-                    >
-                      🗑️ מחק
-                    </button>
-                  )}
+                <td style={{ ...styles.td, fontSize: '0.8rem', color: '#999' }}>
+                  {user.id.substring(0, 8)}...
                 </td>
               </tr>
             ))}
@@ -562,39 +537,28 @@ export default function UserManagement() {
                   ✅ המשתמש נוצר בהצלחה!
                 </h3>
                 <p style={{ marginBottom: '1rem', fontWeight: 'bold' }}>
-                  שמור את הפרטים הבאים ושלח למשתמש:
+                  שמור את הפרטים הבאים:
                 </p>
                 <div style={styles.credentialsDisplay}>
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <button 
-                      onClick={() => copyToClipboard(createdUserDetails.email, 'אימייל')}
-                      style={styles.copyButton}
-                    >
-                      📋 העתק
-                    </button>
-                    <strong>אימייל:</strong> {createdUserDetails.email}
-                  </div>
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <button 
-                      onClick={() => copyToClipboard(createdUserDetails.password, 'סיסמה')}
-                      style={styles.copyButton}
-                    >
-                      📋 העתק
-                    </button>
-                    <strong>סיסמה:</strong> {createdUserDetails.password}
-                  </div>
-                  <div>
-                    <strong>תפקיד:</strong> {getRoleText(createdUserDetails.role)}
-                  </div>
+                  <div><strong>אימייל:</strong> {createdUserDetails.email}</div>
+                  <div><strong>סיסמה:</strong> {createdUserDetails.password}</div>
+                  <div><strong>תפקיד:</strong> {getRoleText(createdUserDetails.role)}</div>
                 </div>
+                {createdUserDetails.debug && (
+                  <div style={styles.debugBox}>
+                    {createdUserDetails.debug}
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     setCreatedUserDetails(null);
                     setShowAddUser(false);
+                    setDebugInfo('');
+                    fetchUsers(); // רענן שוב את הרשימה
                   }}
                   style={{ ...styles.button, width: '100%', marginTop: '1rem' }}
                 >
-                  סגור
+                  סגור ורענן
                 </button>
               </div>
             ) : (
@@ -608,7 +572,6 @@ export default function UserManagement() {
                     onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                     required
                     disabled={creating}
-                    placeholder="ישראל ישראלי"
                   />
                 </div>
 
@@ -621,12 +584,11 @@ export default function UserManagement() {
                     onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                     required
                     disabled={creating}
-                    placeholder="user@example.com"
                   />
                 </div>
 
                 <div>
-                  <label style={styles.label}>סיסמה * (לפחות 6 תווים)</label>
+                  <label style={styles.label}>סיסמה *</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -636,7 +598,6 @@ export default function UserManagement() {
                       required
                       minLength={6}
                       disabled={creating}
-                      placeholder="********"
                     />
                     <button
                       type="button"
@@ -650,20 +611,19 @@ export default function UserManagement() {
                       onClick={generatePassword}
                       style={styles.secondaryButton}
                     >
-                      🎲 צור
+                      🎲
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label style={styles.label}>טלפון (אופציונלי)</label>
+                  <label style={styles.label}>טלפון</label>
                   <input
                     type="tel"
                     style={styles.input}
                     value={newUser.phone}
                     onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
                     disabled={creating}
-                    placeholder="050-1234567"
                   />
                 </div>
 
@@ -675,10 +635,10 @@ export default function UserManagement() {
                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                     disabled={creating}
                   >
-                    <option value="VIEWER">צופה - צפייה בלבד</option>
-                    <option value="SALES_AGENT">סוכן מכירות - יצירת הזמנות</option>
-                    <option value="ADMIN">מנהל - ניהול מלא</option>
-                    <option value="SUPER_ADMIN">סופר אדמין - הרשאות מלאות</option>
+                    <option value="VIEWER">צופה</option>
+                    <option value="SALES_AGENT">סוכן מכירות</option>
+                    <option value="ADMIN">מנהל</option>
+                    <option value="SUPER_ADMIN">סופר אדמין</option>
                   </select>
                 </div>
 
@@ -688,7 +648,6 @@ export default function UserManagement() {
                     ...styles.button,
                     width: '100%',
                     opacity: creating ? 0.7 : 1,
-                    cursor: creating ? 'not-allowed' : 'pointer',
                   }}
                   disabled={creating}
                 >
@@ -697,7 +656,7 @@ export default function UserManagement() {
                 
                 <button
                   type="button"
-                  onClick={() => !creating && setShowAddUser(false)}
+                  onClick={() => setShowAddUser(false)}
                   style={{ 
                     ...styles.button, 
                     backgroundColor: '#95a5a6',

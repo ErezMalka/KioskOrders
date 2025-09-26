@@ -92,37 +92,77 @@ export default function UserManagement() {
     setCreatedUserDetails(null);
     
     try {
-      // Call API to create user
-      const response = await fetch('/api/admin/create-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create user');
-      }
-
-      // Success - show the credentials
-      setCreatedUserDetails({
+      // יצירת משתמש דרך Supabase Client
+      const { data, error } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        name: newUser.name,
-        role: newUser.role
+        options: {
+          data: {
+            name: newUser.name,
+            phone: newUser.phone,
+            role: newUser.role
+          },
+          emailRedirectTo: window.location.origin
+        }
       });
-      
-      setMessage('✅ המשתמש נוצר בהצלחה!');
-      
-      // Reset form
-      setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
-      
-      // Refresh users list
-      fetchUsers();
+
+      if (error) throw error;
+
+      if (data.user) {
+        // יצירת פרופיל
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: newUser.email,
+            name: newUser.name,
+            phone: newUser.phone,
+            role: newUser.role,
+            organization_id: currentUser.organization_id || currentUser.id
+          });
+
+        if (profileError) {
+          console.error('Profile error:', profileError);
+        }
+
+        // הצלחה - הצג את הפרטים
+        setCreatedUserDetails({
+          email: newUser.email,
+          password: newUser.password,
+          name: newUser.name,
+          role: newUser.role
+        });
+        
+        setMessage('✅ המשתמש נוצר בהצלחה!');
+        
+        // אפס טופס
+        setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
+        
+        // רענן רשימת משתמשים
+        fetchUsers();
+      }
       
     } catch (error: any) {
-      setMessage(`❌ שגיאה: ${error.message}`);
+      console.error('Error creating user:', error);
+      
+      // טיפול בשגיאות נפוצות
+      if (error.message?.includes('already registered')) {
+        setMessage('❌ משתמש עם אימייל זה כבר קיים');
+      } else if (error.message?.includes('confirmation')) {
+        // אם יש בעיה עם אישור אימייל, עדיין הצג הצלחה
+        setCreatedUserDetails({
+          email: newUser.email,
+          password: newUser.password,
+          name: newUser.name,
+          role: newUser.role,
+          note: 'הערה: ייתכן שיידרש אישור אימייל'
+        });
+        setMessage('✅ המשתמש נוצר! אם יש אישור אימייל - המשתמש יצטרך לאשר');
+        setNewUser({ email: '', password: '', name: '', phone: '', role: 'SALES_AGENT' });
+        fetchUsers();
+      } else {
+        setMessage(`❌ שגיאה: ${error.message}`);
+      }
     } finally {
       setCreating(false);
     }
@@ -139,8 +179,6 @@ export default function UserManagement() {
       
       setMessage('✅ התפקיד עודכן');
       fetchUsers();
-      
-      // Clear message after 3 seconds
       setTimeout(() => setMessage(''), 3000);
     } catch (error: any) {
       setMessage(`❌ שגיאה: ${error.message}`);
@@ -181,7 +219,6 @@ export default function UserManagement() {
       cursor: 'pointer',
       fontSize: '1rem',
       fontWeight: 'bold',
-      transition: 'background-color 0.3s',
     },
     secondaryButton: {
       padding: '0.5rem 1rem',
@@ -198,7 +235,6 @@ export default function UserManagement() {
       borderRadius: '8px',
       overflow: 'hidden',
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      overflowX: 'auto' as const,
     },
     th: {
       backgroundColor: '#f5f5f5',
@@ -206,7 +242,6 @@ export default function UserManagement() {
       textAlign: 'right' as const,
       fontWeight: 'bold',
       borderBottom: '2px solid #ddd',
-      whiteSpace: 'nowrap' as const,
     },
     td: {
       padding: '1rem',
@@ -261,20 +296,6 @@ export default function UserManagement() {
       color: '#555',
       marginBottom: '0.25rem',
     },
-    roleTag: {
-      padding: '0.25rem 0.75rem',
-      borderRadius: '12px',
-      fontSize: '0.85rem',
-      fontWeight: 'bold',
-      display: 'inline-block',
-    },
-    message: {
-      padding: '1rem',
-      borderRadius: '6px',
-      marginBottom: '1rem',
-      textAlign: 'center' as const,
-      fontWeight: 'bold',
-    },
     successBox: {
       backgroundColor: '#e8f5e9',
       border: '1px solid #4CAF50',
@@ -299,6 +320,14 @@ export default function UserManagement() {
       fontSize: '0.8rem',
       marginRight: '0.5rem',
     },
+    warningBox: {
+      backgroundColor: '#fff3cd',
+      border: '1px solid #ffc107',
+      borderRadius: '6px',
+      padding: '1rem',
+      marginBottom: '1rem',
+      color: '#856404',
+    },
   };
 
   const getRoleColor = (role: string) => {
@@ -311,6 +340,16 @@ export default function UserManagement() {
         return { backgroundColor: '#45b7d1', color: 'white' };
       default:
         return { backgroundColor: '#95a5a6', color: 'white' };
+    }
+  };
+
+  const getRoleText = (role: string) => {
+    switch (role) {
+      case 'SUPER_ADMIN': return 'סופר אדמין';
+      case 'ADMIN': return 'מנהל';
+      case 'SALES_AGENT': return 'סוכן מכירות';
+      case 'VIEWER': return 'צופה';
+      default: return role;
     }
   };
 
@@ -336,7 +375,11 @@ export default function UserManagement() {
 
       {message && !createdUserDetails && (
         <div style={{
-          ...styles.message,
+          padding: '1rem',
+          borderRadius: '6px',
+          marginBottom: '1rem',
+          textAlign: 'center',
+          fontWeight: 'bold',
           backgroundColor: message.includes('✅') || message.includes('📋') ? '#d4edda' : '#f8d7da',
           color: message.includes('✅') || message.includes('📋') ? '#155724' : '#721c24',
           border: message.includes('✅') || message.includes('📋') ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
@@ -364,8 +407,14 @@ export default function UserManagement() {
                 <td style={styles.td}>{user.phone || '-'}</td>
                 <td style={styles.td}>
                   {currentUser?.id === user.id ? (
-                    <span style={{ ...styles.roleTag, ...getRoleColor(user.role) }}>
-                      {user.role} (אתה)
+                    <span style={{ 
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '12px',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold',
+                      ...getRoleColor(user.role) 
+                    }}>
+                      {getRoleText(user.role)} (אתה)
                     </span>
                   ) : (
                     <select
@@ -413,7 +462,7 @@ export default function UserManagement() {
                     </button>
                     <strong>אימייל:</strong> {createdUserDetails.email}
                   </div>
-                  <div>
+                  <div style={{ marginBottom: '0.5rem' }}>
                     <button 
                       onClick={() => copyToClipboard(createdUserDetails.password, 'סיסמה')}
                       style={styles.copyButton}
@@ -422,7 +471,15 @@ export default function UserManagement() {
                     </button>
                     <strong>סיסמה:</strong> {createdUserDetails.password}
                   </div>
+                  <div>
+                    <strong>תפקיד:</strong> {getRoleText(createdUserDetails.role)}
+                  </div>
                 </div>
+                {createdUserDetails.note && (
+                  <div style={{ ...styles.warningBox, marginTop: '1rem' }}>
+                    ⚠️ {createdUserDetails.note}
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     setCreatedUserDetails(null);

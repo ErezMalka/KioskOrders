@@ -1,488 +1,369 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react'
 import { 
-  Upload, Plus, Trash2, Edit, Save, X, FileSpreadsheet, 
-  Download, Search, Building2, User, Mail, Phone, MapPin, 
-  Globe, Hash, Briefcase, CreditCard, Calendar, FileText, 
+  Search, Plus, Edit2, Trash2, Phone, Mail, MapPin, Building, 
+  User, Calendar, DollarSign, Package, FileText, Download, Upload,
   Star, Check, AlertCircle, Sparkles, Users, Trophy, Zap, 
-  Shield, TrendingUp, Target, Smartphone, Package, Filter,
-  ChevronRight, Activity, Award, Layers, Command, Grid3x3,
+  Shield, TrendingUp, Target, Smartphone, Filter,
+  ChevronRight, Activity, Award, Layers, Command,
   BarChart3, PieChart, TrendingDown, ArrowUpRight, Gem,
-  Rocket, Crown, Flame, Heart, MessageCircle, Bell, Settings
-} from 'lucide-react';
+  Rocket, Crown, Flame, Heart, MessageCircle, Bell, Settings,
+  Grid, LayoutGrid, Table
+} from 'lucide-react'
+import { supabase } from '@/lib/supabaseClient'
+
+interface Customer {
+  id: string
+  name: string
+  email?: string
+  phone?: string
+  address?: string
+  city?: string
+  created_at: string
+  [key: string]: any
+}
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'table' | 'list'>('grid');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: ''
+  })
 
-  // טעינת לקוחות מ-localStorage
   useEffect(() => {
-    const savedCustomers = localStorage.getItem('customers');
-    if (savedCustomers) {
-      const parsed = JSON.parse(savedCustomers);
-      setCustomers(parsed);
-      setFilteredCustomers(parsed);
+    fetchCustomers()
+  }, [])
+
+  async function fetchCustomers() {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setCustomers(data || [])
+    } catch (error) {
+      console.error('Error fetching customers:', error)
+    } finally {
+      setLoading(false)
     }
-  }, []);
+  }
 
-  // חיפוש וסינון
-  useEffect(() => {
-    let filtered = customers.filter(customer => 
-      customer.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.contactName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(customer => {
-        if (statusFilter === 'active') return customer.status === 'active' || customer.status === 'פעיל';
-        if (statusFilter === 'inactive') return customer.status === 'inactive' || customer.status === 'לא פעיל';
-        if (statusFilter === 'potential') return customer.status === 'potential' || customer.status === 'פוטנציאלי';
-        return false;
-      });
-    }
-
-    setFilteredCustomers(filtered);
-  }, [searchTerm, customers, statusFilter]);
-
-  const stats = {
-    total: customers.length,
-    active: customers.filter(c => c.status === 'active' || c.status === 'פעיל').length,
-    potential: customers.filter(c => c.status === 'potential' || c.status === 'פוטנציאלי').length,
-    inactive: customers.filter(c => c.status === 'inactive' || c.status === 'לא פעיל').length,
-    growth: 12.5 // אחוז צמיחה
-  };
-
-  const CustomerCard = ({ customer, index }: { customer: any; index: number }) => {
-    const isHovered = hoveredCard === customer.id;
-    const displayStatus = customer.status === 'active' ? 'פעיל' : 
-                         customer.status === 'inactive' ? 'לא פעיל' : 
-                         customer.status === 'potential' ? 'פוטנציאלי' : 
-                         customer.status;
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
     
+    try {
+      if (editingCustomer) {
+        const { error } = await supabase
+          .from('customers')
+          .update(formData)
+          .eq('id', editingCustomer.id)
+
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('customers')
+          .insert([formData])
+
+        if (error) throw error
+      }
+
+      await fetchCustomers()
+      setShowForm(false)
+      setEditingCustomer(null)
+      setFormData({ name: '', email: '', phone: '', address: '', city: '' })
+      
+    } catch (error) {
+      console.error('Error saving customer:', error)
+      alert('שגיאה בשמירת הלקוח')
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק את הלקוח?')) return
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      await fetchCustomers()
+    } catch (error) {
+      console.error('Error deleting customer:', error)
+      alert('שגיאה במחיקת הלקוח')
+    }
+  }
+
+  function handleEdit(customer: Customer) {
+    setEditingCustomer(customer)
+    setFormData({
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || ''
+    })
+    setShowForm(true)
+  }
+
+  const filteredCustomers = customers.filter(customer => {
+    const searchLower = searchQuery.toLowerCase()
     return (
-      <div
-        onMouseEnter={() => setHoveredCard(customer.id)}
-        onMouseLeave={() => setHoveredCard(null)}
-        style={{
-          animationDelay: `${index * 0.05}s`
-        }}
-        className={`
-          relative group bg-white rounded-3xl p-8 
-          border-2 border-gray-100 hover:border-transparent
-          transform transition-all duration-500 ease-out animate-fadeInUp
-          ${isHovered ? 'scale-[1.02] -translate-y-2' : ''}
-          hover:shadow-[0_20px_70px_-15px_rgba(0,0,0,0.3)]
-          before:absolute before:inset-0 before:rounded-3xl before:p-[2px]
-          before:bg-gradient-to-br before:from-violet-500 before:via-pink-500 before:to-orange-500
-          before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-500
-          before:-z-10 after:absolute after:inset-[2px] after:bg-white after:rounded-[22px] after:-z-10
-        `}
-      >
-        {/* נקודת סטטוס מהבהבת */}
-        <div className="absolute top-6 right-6">
-          <div className={`relative flex items-center justify-center`}>
-            <span className={`
-              absolute inline-flex h-3 w-3 rounded-full opacity-75 animate-ping
-              ${(customer.status === 'active' || customer.status === 'פעיל') ? 'bg-emerald-400' :
-                (customer.status === 'potential' || customer.status === 'פוטנציאלי') ? 'bg-amber-400' :
-                'bg-gray-400'}
-            `}></span>
-            <span className={`
-              relative inline-flex rounded-full h-3 w-3
-              ${(customer.status === 'active' || customer.status === 'פעיל') ? 'bg-emerald-500' :
-                (customer.status === 'potential' || customer.status === 'פוטנציאלי') ? 'bg-amber-500' :
-                'bg-gray-500'}
-            `}></span>
-          </div>
-        </div>
+      customer.name?.toLowerCase().includes(searchLower) ||
+      customer.email?.toLowerCase().includes(searchLower) ||
+      customer.phone?.includes(searchQuery) ||
+      customer.city?.toLowerCase().includes(searchLower)
+    )
+  })
 
-        {/* תוכן הכרטיס */}
-        <div className="flex items-start gap-5 mb-6">
-          <div className={`
-            relative w-16 h-16 rounded-2xl
-            bg-gradient-to-br from-violet-500 via-pink-500 to-orange-500
-            flex items-center justify-center text-white font-bold text-2xl
-            transform transition-all duration-500
-            ${isHovered ? 'rotate-12 scale-110' : ''}
-          `}>
-            <span className="transform transition-transform duration-500 group-hover:scale-125">
-              {customer.businessName?.charAt(0) || '?'}
-            </span>
-          </div>
-          
-          <div className="flex-1">
-            <h3 className="text-xl font-bold text-gray-900 mb-1 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:to-pink-600 transition-all duration-300">
-              {customer.businessName}
-            </h3>
-            <p className="text-sm text-gray-500 flex items-center gap-2">
-              <Briefcase className="w-3 h-3" />
-              {customer.businessType || 'לא צוין'}
-            </p>
-          </div>
-        </div>
-
-        {/* פרטי קשר */}
-        <div className="space-y-3 mb-6">
-          <div className="flex items-center gap-3 text-sm text-gray-600 group/item hover:text-violet-600 transition-colors cursor-pointer">
-            <User className="w-4 h-4 group-hover/item:scale-110 transition-transform" />
-            <span>{customer.contactName}</span>
-          </div>
-          {customer.email && (
-            <div className="flex items-center gap-3 text-sm text-gray-600 group/item hover:text-violet-600 transition-colors cursor-pointer">
-              <Mail className="w-4 h-4 group-hover/item:scale-110 transition-transform" />
-              <span className="truncate">{customer.email}</span>
-            </div>
-          )}
-          {customer.phone && (
-            <div className="flex items-center gap-3 text-sm text-gray-600 group/item hover:text-violet-600 transition-colors cursor-pointer">
-              <Phone className="w-4 h-4 group-hover/item:scale-110 transition-transform" />
-              <span>{customer.phone}</span>
-            </div>
-          )}
-        </div>
-
-        {/* כפתורי פעולה */}
-        <div className={`
-          flex gap-3 transform transition-all duration-500
-          ${isHovered ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'}
-        `}>
-          <button className="
-            flex-1 py-3 px-4 rounded-2xl font-medium text-sm
-            bg-gradient-to-r from-violet-500 to-pink-500 text-white
-            hover:from-violet-600 hover:to-pink-600
-            transform hover:scale-105 transition-all duration-300
-            shadow-lg hover:shadow-xl
-          ">
-            עריכה
-          </button>
-          <button className="
-            py-3 px-4 rounded-2xl font-medium text-sm
-            bg-gray-100 text-gray-700
-            hover:bg-red-500 hover:text-white
-            transform hover:scale-105 transition-all duration-300
-          ">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* תג סטטוס */}
-        <div className={`
-          absolute bottom-6 left-6 px-3 py-1 rounded-full text-xs font-medium
-          transform transition-all duration-500
-          ${isHovered ? 'scale-110' : ''}
-          ${(customer.status === 'active' || customer.status === 'פעיל') ? 'bg-emerald-100 text-emerald-700' :
-            (customer.status === 'potential' || customer.status === 'פוטנציאלי') ? 'bg-amber-100 text-amber-700' :
-            'bg-gray-100 text-gray-700'}
-        `}>
-          {displayStatus}
-        </div>
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-2xl">טוען לקוחות...</div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50 to-pink-50" dir="rtl">
-      {/* Navigation Bar */}
-      <div className="sticky top-0 z-40 backdrop-blur-2xl bg-white/70 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-pink-600 rounded-2xl blur-lg opacity-70 animate-pulse"></div>
-                  <div className="relative bg-gradient-to-r from-violet-600 to-pink-600 text-white px-4 py-2 rounded-2xl font-bold text-xl">
-                    CRM
-                  </div>
-                </div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                  ניהול לקוחות
-                </h1>
-              </div>
-            </div>
+    <div className="container mx-auto p-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <Users className="w-8 h-8" />
+          ניהול לקוחות
+        </h1>
+        <button
+          onClick={() => {
+            setShowForm(!showForm)
+            if (!showForm) {
+              setEditingCustomer(null)
+              setFormData({ name: '', email: '', phone: '', address: '', city: '' })
+            }
+          }}
+          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          הוסף לקוח
+        </button>
+      </div>
 
-            {/* כפתורי ניווט עליונים */}
-            <div className="flex items-center gap-3">
-              <button className="relative p-3 rounded-2xl bg-white border border-gray-200 hover:border-violet-300 hover:shadow-lg transition-all duration-300 group">
-                <Bell className="w-5 h-5 text-gray-600 group-hover:text-violet-600 transition-colors" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-              </button>
-              <button className="p-3 rounded-2xl bg-white border border-gray-200 hover:border-violet-300 hover:shadow-lg transition-all duration-300 group">
-                <MessageCircle className="w-5 h-5 text-gray-600 group-hover:text-violet-600 transition-colors" />
-              </button>
-              <button className="p-3 rounded-2xl bg-white border border-gray-200 hover:border-violet-300 hover:shadow-lg transition-all duration-300 group">
-                <Settings className="w-5 h-5 text-gray-600 group-hover:text-violet-600 transition-colors" />
-              </button>
-            </div>
-          </div>
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="חיפוש לפי שם, אימייל, טלפון או עיר..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="group relative bg-white rounded-3xl p-6 border border-gray-100 hover:shadow-2xl transition-all duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-600 opacity-0 group-hover:opacity-10 transition-opacity duration-500"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white">
-                  <Users className="w-6 h-6" />
-                </div>
-                <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  {stats.growth}%
-                </span>
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</h3>
-              <p className="text-sm text-gray-500">סה״כ לקוחות</p>
+      {/* Form */}
+      {showForm && (
+        <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
+          <h2 className="text-xl font-bold mb-4">
+            {editingCustomer ? 'עריכת לקוח' : 'לקוח חדש'}
+          </h2>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <User className="inline w-4 h-4 ml-1" />
+                שם הלקוח *
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          </div>
 
-          <div className="group relative bg-white rounded-3xl p-6 border border-gray-100 hover:shadow-2xl transition-all duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-600 opacity-0 group-hover:opacity-10 transition-opacity duration-500"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-                  <Activity className="w-6 h-6" />
-                </div>
-                <Crown className="w-5 h-5 text-yellow-500" />
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.active}</h3>
-              <p className="text-sm text-gray-500">לקוחות פעילים</p>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <Mail className="inline w-4 h-4 ml-1" />
+                אימייל
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          </div>
 
-          <div className="group relative bg-white rounded-3xl p-6 border border-gray-100 hover:shadow-2xl transition-all duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-600 opacity-0 group-hover:opacity-10 transition-opacity duration-500"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white">
-                  <Target className="w-6 h-6" />
-                </div>
-                <Flame className="w-5 h-5 text-orange-500 animate-pulse" />
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.potential}</h3>
-              <p className="text-sm text-gray-500">פוטנציאליים</p>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <Phone className="inline w-4 h-4 ml-1" />
+                טלפון
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          </div>
 
-          <div className="group relative bg-white rounded-3xl p-6 border border-gray-100 hover:shadow-2xl transition-all duration-500 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-gray-400 to-gray-600 opacity-0 group-hover:opacity-10 transition-opacity duration-500"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-gray-400 to-gray-600 text-white">
-                  <TrendingDown className="w-6 h-6" />
-                </div>
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.inactive}</h3>
-              <p className="text-sm text-gray-500">לא פעילים</p>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <MapPin className="inline w-4 h-4 ml-1" />
+                כתובת
+              </label>
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) => setFormData({...formData, address: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
-          </div>
-        </div>
 
-        {/* Action Bar */}
-        <div className="bg-white rounded-3xl p-6 mb-8 border border-gray-100 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* כפתורי פעולה */}
-            <div className="flex flex-wrap gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                <Building className="inline w-4 h-4 ml-1" />
+                עיר
+              </label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({...formData, city: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="md:col-span-2 flex gap-2">
               <button
-                onClick={() => setShowAddModal(true)}
-                className="
-                  group relative px-8 py-4 
-                  bg-gradient-to-r from-violet-600 to-pink-600 
-                  text-white font-semibold text-sm
-                  rounded-2xl overflow-hidden
-                  transform hover:scale-105 transition-all duration-300
-                  shadow-lg hover:shadow-2xl
-                  before:absolute before:inset-0
-                  before:bg-gradient-to-r before:from-pink-600 before:to-violet-600
-                  before:opacity-0 hover:before:opacity-100
-                  before:transition-opacity before:duration-500
-                "
+                type="submit"
+                className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600"
               >
-                <span className="relative flex items-center gap-3">
-                  <div className="relative">
-                    <Sparkles className="w-5 h-5" />
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-ping"></div>
-                  </div>
-                  לקוח חדש
-                </span>
+                {editingCustomer ? 'עדכן' : 'הוסף'}
               </button>
-
-              <button className="
-                relative px-6 py-4 
-                bg-white border-2 border-gray-200
-                text-gray-700 font-semibold text-sm
-                rounded-2xl overflow-hidden
-                transform hover:scale-105 transition-all duration-300
-                hover:border-blue-400 hover:text-blue-600
-                hover:shadow-lg group
-              ">
-                <span className="flex items-center gap-3">
-                  <Upload className="w-5 h-5 group-hover:animate-bounce" />
-                  ייבוא
-                </span>
-              </button>
-
-              <button className="
-                relative px-6 py-4 
-                bg-white border-2 border-gray-200
-                text-gray-700 font-semibold text-sm
-                rounded-2xl overflow-hidden
-                transform hover:scale-105 transition-all duration-300
-                hover:border-purple-400 hover:text-purple-600
-                hover:shadow-lg group
-              ">
-                <span className="flex items-center gap-3">
-                  <Download className="w-5 h-5 group-hover:animate-bounce" />
-                  ייצוא
-                </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false)
+                  setEditingCustomer(null)
+                  setFormData({ name: '', email: '', phone: '', address: '', city: '' })
+                }}
+                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400"
+              >
+                ביטול
               </button>
             </div>
-
-            {/* חיפוש וסינון */}
-            <div className="flex items-center gap-3">
-              {/* סינון סטטוס */}
-              <div className="relative group">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="
-                    appearance-none px-6 py-3 pr-12
-                    bg-gray-50 border-2 border-gray-200
-                    rounded-2xl font-medium text-sm
-                    hover:border-violet-300 focus:border-violet-500
-                    focus:outline-none transition-all duration-300
-                    cursor-pointer hover:shadow-lg
-                  "
-                >
-                  <option value="all">כל הסטטוסים</option>
-                  <option value="active">פעילים</option>
-                  <option value="potential">פוטנציאליים</option>
-                  <option value="inactive">לא פעילים</option>
-                </select>
-                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-              </div>
-
-              {/* תיבת חיפוש */}
-              <div className="relative group">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="חיפוש לקוחות..."
-                  className="
-                    w-80 px-6 py-3 pr-12
-                    bg-gray-50 border-2 border-gray-200
-                    rounded-2xl font-medium text-sm
-                    hover:border-violet-300 focus:border-violet-500
-                    focus:outline-none transition-all duration-300
-                    placeholder:text-gray-400
-                    hover:shadow-lg focus:shadow-xl
-                  "
-                />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-violet-600 transition-colors" />
-              </div>
-
-              {/* כפתורי תצוגה */}
-              <div className="flex items-center bg-gray-100 rounded-2xl p-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`
-                    p-3 rounded-xl transition-all duration-300
-                    ${viewMode === 'grid' 
-                      ? 'bg-white shadow-lg text-violet-600' 
-                      : 'text-gray-500 hover:text-gray-700'}
-                  `}
-                >
-                  <Grid3x3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={`
-                    p-3 rounded-xl transition-all duration-300
-                    ${viewMode === 'table' 
-                      ? 'bg-white shadow-lg text-violet-600' 
-                      : 'text-gray-500 hover:text-gray-700'}
-                  `}
-                >
-                  <Layers className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`
-                    p-3 rounded-xl transition-all duration-300
-                    ${viewMode === 'list' 
-                      ? 'bg-white shadow-lg text-violet-600' 
-                      : 'text-gray-500 hover:text-gray-700'}
-                  `}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+          </form>
         </div>
+      )}
 
-        {/* תצוגת כרטיסים */}
-        {viewMode === 'grid' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCustomers.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-24">
-                <div className="relative mb-8">
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600 to-pink-600 rounded-full blur-3xl opacity-20 animate-pulse"></div>
-                  <Users className="relative w-24 h-24 text-gray-300" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">אין לקוחות במערכת</h3>
-                <p className="text-gray-500 mb-8">התחל בהוספת לקוח חדש או ייבוא מאקסל</p>
+      {/* Customers Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredCustomers.map((customer) => (
+          <div key={customer.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-5">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">{customer.name}</h3>
+              <div className="flex gap-1">
                 <button
-                  onClick={() => setShowAddModal(true)}
-                  className="
-                    px-8 py-4 
-                    bg-gradient-to-r from-violet-600 to-pink-600 
-                    text-white font-semibold
-                    rounded-2xl transform hover:scale-105 
-                    transition-all duration-300 shadow-xl hover:shadow-2xl
-                  "
+                  onClick={() => handleEdit(customer)}
+                  className="text-blue-600 hover:text-blue-800 p-1"
                 >
-                  הוסף לקוח ראשון
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(customer.id)}
+                  className="text-red-600 hover:text-red-800 p-1"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              filteredCustomers.map((customer, index) => (
-                <CustomerCard key={customer.id} customer={customer} index={index} />
-              ))
-            )}
-          </div>
-        )}
+            </div>
 
-        {/* הוסף תצוגת טבלה או רשימה כאן בהתאם */}
+            <div className="space-y-2 text-sm">
+              {customer.email && (
+                <div className="flex items-center text-gray-600">
+                  <Mail className="w-4 h-4 ml-2" />
+                  {customer.email}
+                </div>
+              )}
+              {customer.phone && (
+                <div className="flex items-center text-gray-600">
+                  <Phone className="w-4 h-4 ml-2" />
+                  {customer.phone}
+                </div>
+              )}
+              {customer.city && (
+                <div className="flex items-center text-gray-600">
+                  <Building className="w-4 h-4 ml-2" />
+                  {customer.city}
+                </div>
+              )}
+              {customer.address && (
+                <div className="flex items-center text-gray-600">
+                  <MapPin className="w-4 h-4 ml-2" />
+                  {customer.address}
+                </div>
+              )}
+              <div className="flex items-center text-gray-500 text-xs pt-2 border-t">
+                <Calendar className="w-3 h-3 ml-1" />
+                {new Date(customer.created_at).toLocaleDateString('he-IL')}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+      {filteredCustomers.length === 0 && (
+        <div className="text-center py-12">
+          <Users className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+          <p className="text-gray-500">
+            {searchQuery ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+          </p>
+        </div>
+      )}
 
-        .animate-fadeInUp {
-          animation: fadeInUp 0.6s ease-out forwards;
-          opacity: 0;
-        }
-      `}</style>
+      {/* Statistics */}
+      <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 rounded-lg p-4">
+          <div className="text-blue-600 text-sm">סה"כ לקוחות</div>
+          <div className="text-2xl font-bold text-blue-800">{customers.length}</div>
+        </div>
+        <div className="bg-green-50 rounded-lg p-4">
+          <div className="text-green-600 text-sm">לקוחות החודש</div>
+          <div className="text-2xl font-bold text-green-800">
+            {customers.filter(c => {
+              const createdDate = new Date(c.created_at)
+              const now = new Date()
+              return createdDate.getMonth() === now.getMonth() && 
+                     createdDate.getFullYear() === now.getFullYear()
+            }).length}
+          </div>
+        </div>
+        <div className="bg-yellow-50 rounded-lg p-4">
+          <div className="text-yellow-600 text-sm">עם אימייל</div>
+          <div className="text-2xl font-bold text-yellow-800">
+            {customers.filter(c => c.email).length}
+          </div>
+        </div>
+        <div className="bg-purple-50 rounded-lg p-4">
+          <div className="text-purple-600 text-sm">עם טלפון</div>
+          <div className="text-2xl font-bold text-purple-800">
+            {customers.filter(c => c.phone).length}
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

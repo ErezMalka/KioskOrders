@@ -6,11 +6,15 @@ import { supabase } from '@/lib/supabaseClient'
 interface Product {
   id: string
   name: string
-  price: number
   category: string
-  active: boolean
-  created_at: string
+  base_price: number
+  price?: number
+  description?: string
+  image_url?: string
+  active?: boolean
+  created_at?: string
   updated_at?: string
+  organization_id?: string
 }
 
 export default function ProductsPage() {
@@ -20,8 +24,11 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [formData, setFormData] = useState({
     name: '',
-    price: '',
     category: '',
+    base_price: '',
+    price: '',
+    description: '',
+    image_url: '',
     active: true
   })
 
@@ -42,16 +49,7 @@ export default function ProductsPage() {
         throw error
       }
       
-      // וודא שכל מוצר יש לו ערך price תקין
-      const validatedProducts = (data || []).map(product => ({
-        ...product,
-        price: product.price ?? 0, // אם price הוא null או undefined, שים 0
-        name: product.name || 'ללא שם',
-        category: product.category || 'כללי',
-        active: product.active ?? true
-      }))
-      
-      setProducts(validatedProducts)
+      setProducts(data || [])
     } catch (error) {
       console.error('Error fetching products:', error)
       alert('שגיאה בטעינת המוצרים')
@@ -66,15 +64,13 @@ export default function ProductsPage() {
     try {
       const productData = {
         name: formData.name.trim(),
-        price: parseFloat(formData.price) || 0,
         category: formData.category,
-        active: formData.active
-      }
-
-      // וידוא שהמחיר תקין
-      if (isNaN(productData.price) || productData.price < 0) {
-        alert('נא להזין מחיר תקין')
-        return
+        base_price: parseFloat(formData.base_price) || 0,
+        price: formData.price ? parseFloat(formData.price) : parseFloat(formData.base_price) || 0,
+        description: formData.description || null,
+        image_url: formData.image_url || null,
+        active: formData.active,
+        updated_at: new Date().toISOString()
       }
 
       if (editingProduct) {
@@ -88,22 +84,27 @@ export default function ProductsPage() {
           .select()
 
         if (error) {
-          console.error('Update error details:', error)
+          console.error('Update error:', error)
           throw error
         }
 
         console.log('Update successful:', data)
       } else {
         // הוספת מוצר חדש
-        console.log('Creating new product:', productData)
+        const newProduct = {
+          ...productData,
+          created_at: new Date().toISOString()
+        }
+
+        console.log('Creating new product:', newProduct)
         
         const { data, error } = await supabase
           .from('products')
-          .insert([productData])
+          .insert([newProduct])
           .select()
 
         if (error) {
-          console.error('Insert error details:', error)
+          console.error('Insert error:', error)
           throw error
         }
 
@@ -114,7 +115,15 @@ export default function ProductsPage() {
       await fetchProducts()
       
       // איפוס הטופס
-      setFormData({ name: '', price: '', category: '', active: true })
+      setFormData({ 
+        name: '', 
+        category: '', 
+        base_price: '',
+        price: '',
+        description: '',
+        image_url: '',
+        active: true 
+      })
       setShowForm(false)
       setEditingProduct(null)
       
@@ -130,17 +139,12 @@ export default function ProductsPage() {
     if (!confirm(`האם אתה בטוח שברצונך למחוק את המוצר "${productName}"?`)) return
 
     try {
-      console.log('Deleting product:', id)
-      
       const { error } = await supabase
         .from('products')
         .delete()
         .eq('id', id)
 
-      if (error) {
-        console.error('Delete error:', error)
-        throw error
-      }
+      if (error) throw error
       
       await fetchProducts()
       alert('המוצר נמחק בהצלחה')
@@ -154,8 +158,11 @@ export default function ProductsPage() {
     setEditingProduct(product)
     setFormData({
       name: product.name || '',
-      price: (product.price ?? 0).toString(),
       category: product.category || '',
+      base_price: product.base_price?.toString() || '',
+      price: product.price?.toString() || '',
+      description: product.description || '',
+      image_url: product.image_url || '',
       active: product.active ?? true
     })
     setShowForm(true)
@@ -164,23 +171,20 @@ export default function ProductsPage() {
   function handleCancel() {
     setShowForm(false)
     setEditingProduct(null)
-    setFormData({ name: '', price: '', category: '', active: true })
+    setFormData({ 
+      name: '', 
+      category: '', 
+      base_price: '',
+      price: '',
+      description: '',
+      image_url: '',
+      active: true 
+    })
   }
 
-  // פונקציה להצגת מחיר בטוח
-  function formatPrice(price: number | null | undefined): string {
-    const validPrice = price ?? 0
-    return validPrice.toFixed(2)
-  }
-
-  // פונקציה לפורמט תאריך בטוח
-  function formatDate(dateString: string | null | undefined): string {
-    if (!dateString) return 'לא ידוע'
-    try {
-      return new Date(dateString).toLocaleDateString('he-IL')
-    } catch {
-      return 'לא ידוע'
-    }
+  // פונקציה להצגת מחיר - מעדיפה price על base_price
+  function getDisplayPrice(product: Product): number {
+    return product.price ?? product.base_price ?? 0
   }
 
   if (loading) {
@@ -199,8 +203,7 @@ export default function ProductsPage() {
           onClick={() => {
             setShowForm(!showForm)
             if (!showForm) {
-              setEditingProduct(null)
-              setFormData({ name: '', price: '', category: '', active: true })
+              handleCancel()
             }
           }}
           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
@@ -233,22 +236,6 @@ export default function ProductsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-2">
-                מחיר <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                step="0.01"
-                min="0"
-                value={formData.price}
-                onChange={(e) => setFormData({...formData, price: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
                 קטגוריה <span className="text-red-500">*</span>
               </label>
               <select
@@ -266,6 +253,63 @@ export default function ProductsPage() {
                 <option value="מנות ראשונות">מנות ראשונות</option>
                 <option value="מבצעים">מבצעים</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                מחיר בסיס <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                step="0.01"
+                min="0"
+                value={formData.base_price}
+                onChange={(e) => setFormData({...formData, base_price: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                מחיר מכירה (אופציונלי)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.price}
+                onChange={(e) => setFormData({...formData, price: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="השאר ריק לשימוש במחיר הבסיס"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-2">
+                תיאור
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                placeholder="תיאור המוצר..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                קישור לתמונה
+              </label>
+              <input
+                type="url"
+                value={formData.image_url}
+                onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="https://..."
+              />
             </div>
 
             <div className="flex items-center">
@@ -306,10 +350,11 @@ export default function ProductsPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">שם</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">מחיר</th>
                 <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">קטגוריה</th>
+                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">מחיר בסיס</th>
+                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">מחיר מכירה</th>
+                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">תיאור</th>
                 <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">סטטוס</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">נוצר בתאריך</th>
                 <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">פעולות</th>
               </tr>
             </thead>
@@ -317,14 +362,28 @@ export default function ProductsPage() {
               {products.map((product) => (
                 <tr key={product.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {product.name || 'ללא שם'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    ₪{formatPrice(product.price)}
+                    {product.name}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                      {product.category || 'כללי'}
+                      {product.category}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    ₪{(product.base_price ?? 0).toFixed(2)}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {product.price ? (
+                      <span className="font-semibold text-green-600">
+                        ₪{product.price.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    <span className="truncate block max-w-xs" title={product.description || ''}>
+                      {product.description || '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -335,9 +394,6 @@ export default function ProductsPage() {
                     }`}>
                       {product.active ? 'פעיל' : 'לא פעיל'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {formatDate(product.created_at)}
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <button
@@ -359,7 +415,7 @@ export default function ProductsPage() {
               ))}
               {products.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     אין מוצרים להצגה
                   </td>
                 </tr>

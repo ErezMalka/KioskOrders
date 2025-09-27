@@ -459,69 +459,7 @@ export default function ProductsPage() {
           </div>
         )}
 
-        {/* Statistics Cards */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '20px',
-          marginBottom: '30px'
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #2196F3'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📦</div>
-            <div style={{ fontSize: '14px', color: '#999', marginBottom: '5px' }}>סה״כ מוצרים</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3' }}>
-              {products.length}
-            </div>
-          </div>
 
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #4CAF50'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>✅</div>
-            <div style={{ fontSize: '14px', color: '#999', marginBottom: '5px' }}>מוצרים פעילים</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50' }}>
-              {products.filter(p => p.active).length}
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #FF9800'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏸️</div>
-            <div style={{ fontSize: '14px', color: '#999', marginBottom: '5px' }}>מוצרים לא פעילים</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800' }}>
-              {products.filter(p => !p.active).length}
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #9C27B0'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
-            <div style={{ fontSize: '14px', color: '#999', marginBottom: '5px' }}>קטגוריות</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0' }}>
-              {[...new Set(products.map(p => p.category).filter(c => c))].length}
-            </div>
-          </div>
-        </div>
 
         {/* Table Section */}
         <div style={{

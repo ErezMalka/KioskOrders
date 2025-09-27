@@ -1,184 +1,152 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
-interface Product {
-  id: string
-  name: string
-  category: string
-  base_price: number
-  price?: number
-  description?: string
-  image_url?: string
-  active?: boolean
-  created_at?: string
-  updated_at?: string
-  organization_id?: string
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface Customer {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  created_at: string;
 }
 
-export default function ProductsPage() {
-  const router = useRouter()
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+export default function CustomersPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
-    base_price: '',
-    price: '',
-    description: '',
-    image_url: '',
-    active: true
-  })
+    email: '',
+    phone: '',
+    address: '',
+    city: ''
+  });
 
   useEffect(() => {
-    checkUser()
-    fetchProducts()
-  }, [])
+    checkUser();
+    fetchCustomers();
+  }, []);
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        router.push('/login')
-        return
+        console.log('No user found, redirecting to login');
+        router.push('/login');
+        return;
       }
+
+      setUser(user);
+      console.log('User loaded:', user.email);
     } catch (error) {
-      console.error('Error checking user:', error)
+      console.error('Error checking user:', error);
     }
-  }
+  };
 
-  async function fetchProducts() {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  async function fetchCustomers() {
     try {
-      setLoading(true)
+      setLoading(true);
       const { data, error } = await supabase
-        .from('products')
+        .from('customers')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching products:', error)
-        throw error
-      }
-      
-      setProducts(data || [])
+      if (error) throw error;
+      setCustomers(data || []);
     } catch (error) {
-      console.error('Error fetching products:', error)
-      alert('שגיאה בטעינת המוצרים')
+      console.error('Error fetching customers:', error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+    e.preventDefault();
     
     try {
-      const productData = {
-        name: formData.name.trim(),
-        category: formData.category,
-        base_price: parseFloat(formData.base_price) || 0,
-        price: formData.price ? parseFloat(formData.price) : parseFloat(formData.base_price) || 0,
-        description: formData.description || null,
-        image_url: formData.image_url || null,
-        active: formData.active,
-        updated_at: new Date().toISOString()
-      }
+      if (editingCustomer) {
+        const { error } = await supabase
+          .from('customers')
+          .update(formData)
+          .eq('id', editingCustomer.id);
 
-      if (editingProduct) {
-        const { data, error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', editingProduct.id)
-          .select()
-
-        if (error) throw error
+        if (error) throw error;
       } else {
-        const newProduct = {
-          ...productData,
-          created_at: new Date().toISOString()
-        }
-        
-        const { data, error } = await supabase
-          .from('products')
-          .insert([newProduct])
-          .select()
+        const { error } = await supabase
+          .from('customers')
+          .insert([formData]);
 
-        if (error) throw error
+        if (error) throw error;
       }
 
-      await fetchProducts()
+      await fetchCustomers();
+      setShowForm(false);
+      setEditingCustomer(null);
+      setFormData({ name: '', email: '', phone: '', address: '', city: '' });
       
-      setFormData({ 
-        name: '', 
-        category: '', 
-        base_price: '',
-        price: '',
-        description: '',
-        image_url: '',
-        active: true 
-      })
-      setShowForm(false)
-      setEditingProduct(null)
-      
-      alert(editingProduct ? 'המוצר עודכן בהצלחה!' : 'המוצר נוסף בהצלחה!')
-      
-    } catch (error: any) {
-      console.error('Error saving product:', error)
-      alert('שגיאה בשמירת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      alert('שגיאה בשמירת הלקוח');
     }
   }
 
-  async function handleDelete(id: string, productName: string) {
-    if (!confirm(`האם אתה בטוח שברצונך למחוק את המוצר "${productName}"?`)) return
+  async function handleDelete(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק את הלקוח?')) return;
 
     try {
       const { error } = await supabase
-        .from('products')
+        .from('customers')
         .delete()
-        .eq('id', id)
+        .eq('id', id);
 
-      if (error) throw error
-      
-      await fetchProducts()
-      alert('המוצר נמחק בהצלחה')
-    } catch (error: any) {
-      console.error('Error deleting product:', error)
-      alert('שגיאה במחיקת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
+      if (error) throw error;
+      await fetchCustomers();
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      alert('שגיאה במחיקת הלקוח');
     }
   }
 
-  function handleEdit(product: Product) {
-    setEditingProduct(product)
+  function handleEdit(customer: Customer) {
+    setEditingCustomer(customer);
     setFormData({
-      name: product.name || '',
-      category: product.category || '',
-      base_price: product.base_price?.toString() || '',
-      price: product.price?.toString() || '',
-      description: product.description || '',
-      image_url: product.image_url || '',
-      active: product.active ?? true
-    })
-    setShowForm(true)
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || ''
+    });
+    setShowForm(true);
   }
 
-  function handleCancel() {
-    setShowForm(false)
-    setEditingProduct(null)
-    setFormData({ 
-      name: '', 
-      category: '', 
-      base_price: '',
-      price: '',
-      description: '',
-      image_url: '',
-      active: true 
-    })
-  }
+  const filteredCustomers = customers.filter(customer => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      customer.name?.toLowerCase().includes(searchLower) ||
+      customer.email?.toLowerCase().includes(searchLower) ||
+      customer.phone?.includes(searchQuery) ||
+      customer.city?.toLowerCase().includes(searchLower)
+    );
+  });
 
   if (loading) {
     return (
@@ -192,10 +160,10 @@ export default function ProductsPage() {
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
-          <h2>טוען מוצרים...</h2>
+          <h2>טוען לקוחות...</h2>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -208,8 +176,7 @@ export default function ProductsPage() {
       <header style={{
         backgroundColor: 'white',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        padding: '20px',
-        marginBottom: '30px'
+        padding: '20px'
       }}>
         <div style={{
           maxWidth: '1200px',
@@ -226,52 +193,130 @@ export default function ProductsPage() {
             alignItems: 'center',
             gap: '10px'
           }}>
-            📦 ניהול מוצרים
+            👥 ניהול לקוחות
           </h1>
           
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <button
+              onClick={() => router.push('/dashboard')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              חזרה לדשבורד
+            </button>
+            <span style={{ color: '#666' }}>
+              👤 {user?.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              יציאה
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main style={{
+        maxWidth: '1200px',
+        margin: '40px auto',
+        padding: '0 20px'
+      }}>
+        {/* Action Bar */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '30px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          <div style={{ flex: 1, minWidth: '250px', maxWidth: '500px' }}>
+            <div style={{ position: 'relative' }}>
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '20px'
+              }}>
+                🔍
+              </span>
+              <input
+                type="text"
+                placeholder="חיפוש לפי שם, אימייל, טלפון או עיר..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 40px 10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+          </div>
+          
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setShowForm(!showForm);
+              if (!showForm) {
+                setEditingCustomer(null);
+                setFormData({ name: '', email: '', phone: '', address: '', city: '' });
+              }
+            }}
             style={{
-              backgroundColor: '#4CAF50',
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
               color: 'white',
-              padding: '12px 24px',
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
               fontSize: '16px',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.3s'
+              gap: '8px'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
           >
-            <span>➕</span>
-            <span>הוסף מוצר חדש</span>
+            ➕ לקוח חדש
           </button>
         </div>
-      </header>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-        
-        {/* Form Section */}
+        {/* Form */}
         {showForm && (
           <div style={{
             backgroundColor: 'white',
-            padding: '30px',
             borderRadius: '12px',
+            padding: '30px',
             marginBottom: '30px',
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{
+            <h2 style={{ 
               fontSize: '20px',
               marginBottom: '20px',
-              color: '#333',
-              paddingBottom: '10px',
-              borderBottom: '2px solid #4CAF50'
+              color: '#333'
             }}>
-              {editingProduct ? '✏️ עריכת מוצר' : '➕ מוצר חדש'}
+              {editingCustomer ? 'עריכת לקוח' : 'הוספת לקוח חדש'}
             </h2>
             
             <form onSubmit={handleSubmit}>
@@ -282,8 +327,13 @@ export default function ProductsPage() {
                 marginBottom: '20px'
               }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    שם המוצר <span style={{ color: '#dc3545' }}>*</span>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    👤 שם הלקוח *
                   </label>
                   <input
                     type="text"
@@ -292,164 +342,137 @@ export default function ProductsPage() {
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                     style={{
                       width: '100%',
-                      padding: '10px 15px',
+                      padding: '8px 12px',
                       border: '1px solid #ddd',
                       borderRadius: '6px',
-                      fontSize: '15px'
+                      fontSize: '14px'
                     }}
-                    placeholder="לדוגמה: המבורגר"
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    קטגוריה <span style={{ color: '#dc3545' }}>*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.category}
-                    onChange={(e) => setFormData({...formData, category: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '10px 15px',
-                      border: '1px solid #ddd',
-                      borderRadius: '6px',
-                      fontSize: '15px',
-                      backgroundColor: 'white'
-                    }}
-                  >
-                    <option value="">בחר קטגוריה</option>
-                    <option value="ארוחות">ארוחות</option>
-                    <option value="משקאות">משקאות</option>
-                    <option value="קינוחים">קינוחים</option>
-                    <option value="תוספות">תוספות</option>
-                    <option value="סלטים">סלטים</option>
-                    <option value="מנות ראשונות">מנות ראשונות</option>
-                    <option value="מבצעים">מבצעים</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    מחיר בסיס <span style={{ color: '#dc3545' }}>*</span>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📧 אימייל
                   </label>
                   <input
-                    type="number"
-                    required
-                    step="0.01"
-                    min="0"
-                    value={formData.base_price}
-                    onChange={(e) => setFormData({...formData, base_price: e.target.value})}
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
                     style={{
                       width: '100%',
-                      padding: '10px 15px',
+                      padding: '8px 12px',
                       border: '1px solid #ddd',
                       borderRadius: '6px',
-                      fontSize: '15px'
+                      fontSize: '14px'
                     }}
-                    placeholder="0.00"
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    מחיר מכירה
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📞 טלפון
                   </label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) => setFormData({...formData, price: e.target.value})}
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     style={{
                       width: '100%',
-                      padding: '10px 15px',
+                      padding: '8px 12px',
                       border: '1px solid #ddd',
                       borderRadius: '6px',
-                      fontSize: '15px'
+                      fontSize: '14px'
                     }}
-                    placeholder="אופציונלי"
-                  />
-                </div>
-
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    תיאור המוצר
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '10px 15px',
-                      border: '1px solid #ddd',
-                      borderRadius: '6px',
-                      fontSize: '15px',
-                      minHeight: '80px',
-                      resize: 'vertical'
-                    }}
-                    placeholder="תיאור קצר של המוצר..."
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    קישור לתמונה
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📍 כתובת
                   </label>
                   <input
-                    type="url"
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
                     style={{
                       width: '100%',
-                      padding: '10px 15px',
+                      padding: '8px 12px',
                       border: '1px solid #ddd',
                       borderRadius: '6px',
-                      fontSize: '15px'
+                      fontSize: '14px'
                     }}
-                    placeholder="https://..."
                   />
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={formData.active}
-                      onChange={(e) => setFormData({...formData, active: e.target.checked})}
-                      style={{ width: '20px', height: '20px' }}
-                    />
-                    <span style={{ color: '#666', fontWeight: '500' }}>מוצר פעיל</span>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    🏢 עיר
                   </label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({...formData, city: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
                   type="submit"
                   style={{
+                    padding: '10px 24px',
                     backgroundColor: '#4CAF50',
                     color: 'white',
-                    padding: '12px 30px',
                     border: 'none',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '16px'
+                    fontSize: '14px'
                   }}
                 >
-                  💾 {editingProduct ? 'עדכן מוצר' : 'שמור מוצר'}
+                  {editingCustomer ? '💾 עדכן' : '➕ הוסף'}
                 </button>
                 <button
                   type="button"
-                  onClick={handleCancel}
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingCustomer(null);
+                    setFormData({ name: '', email: '', phone: '', address: '', city: '' });
+                  }}
                   style={{
-                    backgroundColor: '#e0e0e0',
-                    color: '#333',
-                    padding: '12px 30px',
+                    padding: '10px 24px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
                     border: 'none',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '16px'
+                    fontSize: '14px'
                   }}
                 >
                   ביטול
@@ -459,131 +482,206 @@ export default function ProductsPage() {
           </div>
         )}
 
+        {/* Statistics Cards */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '20px',
+          marginBottom: '30px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #2196F3'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>👥</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>סה״כ לקוחות</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3', margin: 0 }}>
+              {customers.length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>לקוחות רשומים במערכת</p>
+          </div>
 
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #4CAF50'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📅</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>לקוחות החודש</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>
+              {customers.filter(c => {
+                const createdDate = new Date(c.created_at);
+                const now = new Date();
+                return createdDate.getMonth() === now.getMonth() && 
+                       createdDate.getFullYear() === now.getFullYear();
+              }).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>נוספו החודש</p>
+          </div>
 
-        {/* Table Section */}
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #FF9800'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📧</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>עם אימייל</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800', margin: 0 }}>
+              {customers.filter(c => c.email).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>כתובות אימייל</p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #9C27B0'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📞</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>עם טלפון</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0', margin: 0 }}>
+              {customers.filter(c => c.phone).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>מספרי טלפון</p>
+          </div>
+        </div>
+
+        {/* Customers Grid */}
         <div style={{
           backgroundColor: 'white',
           borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          marginBottom: '30px'
+          padding: '30px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
         }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ backgroundColor: '#f8f9fa' }}>
-                <tr>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>שם המוצר</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>קטגוריה</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>מחיר בסיס</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>מחיר מכירה</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>תיאור</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>סטטוס</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontSize: '14px', fontWeight: '600', color: '#666', borderBottom: '2px solid #e0e0e0' }}>פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ padding: '15px', fontSize: '14px', color: '#333' }}>
-                      <strong>{product.name}</strong>
-                    </td>
-                    <td style={{ padding: '15px', fontSize: '14px' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        backgroundColor: '#9C27B0',
-                        color: 'white'
-                      }}>
-                        {product.category}
-                      </span>
-                    </td>
-                    <td style={{ padding: '15px', fontSize: '14px', color: '#333' }}>
-                      ₪{(product.base_price ?? 0).toFixed(2)}
-                    </td>
-                    <td style={{ padding: '15px', fontSize: '14px' }}>
-                      {product.price ? (
-                        <span style={{ fontWeight: '600', color: '#2e7d2e' }}>
-                          ₪{product.price.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#999' }}>-</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '15px', fontSize: '14px', color: '#333' }}>
-                      <span title={product.description || ''}>
-                        {product.description ? 
-                          (product.description.length > 50 ? 
-                            product.description.substring(0, 50) + '...' : 
-                            product.description) : 
-                          '-'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '15px' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '4px 12px',
-                        borderRadius: '20px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        backgroundColor: product.active ? '#d4f8d4' : '#ffd4d4',
-                        color: product.active ? '#2e7d2e' : '#c62828'
-                      }}>
-                        {product.active ? 'פעיל' : 'לא פעיל'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '15px' }}>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          onClick={() => handleEdit(product)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            fontSize: '18px',
-                            cursor: 'pointer',
-                            padding: '5px'
-                          }}
-                          title="ערוך"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id, product.name)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            fontSize: '18px',
-                            cursor: 'pointer',
-                            padding: '5px'
-                          }}
-                          title="מחק"
-                        >
-                          🗑️
-                        </button>
+          <h3 style={{ 
+            fontSize: '20px',
+            marginBottom: '20px',
+            color: '#333'
+          }}>
+            רשימת לקוחות
+          </h3>
+
+          {filteredCustomers.length > 0 ? (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '20px'
+            }}>
+              {filteredCustomers.map((customer) => (
+                <div key={customer.id} style={{
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  border: '1px solid #e9ecef',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    display: 'flex',
+                    gap: '5px'
+                  }}>
+                    <button
+                      onClick={() => handleEdit(customer)}
+                      style={{
+                        padding: '5px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                      }}
+                      title="עריכה"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDelete(customer.id)}
+                      style={{
+                        padding: '5px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                      }}
+                      title="מחיקה"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+
+                  <h4 style={{
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    marginBottom: '15px',
+                    color: '#333',
+                    paddingLeft: '60px'
+                  }}>
+                    {customer.name}
+                  </h4>
+
+                  <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
+                    {customer.email && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📧 {customer.email}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-                {products.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ 
-                      textAlign: 'center', 
-                      padding: '60px 20px',
+                    )}
+                    {customer.phone && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📞 {customer.phone}
+                      </div>
+                    )}
+                    {customer.city && (
+                      <div style={{ marginBottom: '8px' }}>
+                        🏢 {customer.city}
+                      </div>
+                    )}
+                    {customer.address && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📍 {customer.address}
+                      </div>
+                    )}
+                    <div style={{
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #dee2e6',
+                      fontSize: '12px',
                       color: '#999'
                     }}>
-                      <div style={{ fontSize: '64px', marginBottom: '20px' }}>📦</div>
-                      <div>אין מוצרים להצגה</div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      📅 {new Date(customer.created_at).toLocaleDateString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#999'
+            }}>
+              <div style={{ fontSize: '64px', marginBottom: '20px' }}>👥</div>
+              <p style={{ fontSize: '18px' }}>
+                {searchQuery ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+              </p>
+              {!searchQuery && (
+                <p style={{ fontSize: '14px', marginTop: '10px' }}>
+                  לחץ על "לקוח חדש" כדי להוסיף את הלקוח הראשון
+                </p>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      </main>
     </div>
-  )
+  );
 }

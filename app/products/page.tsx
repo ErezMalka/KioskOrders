@@ -1,455 +1,587 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-
-interface Product {
-  id: string
-  name: string
-  category: string
-  base_price: number
-  price?: number
-  description?: string
-  image_url?: string
-  active?: boolean
-  created_at?: string
-  updated_at?: string
-  organization_id?: string
-}
-
-export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    base_price: '',
-    price: '',
-    description: '',
-    image_url: '',
-    active: true
-  })
-
-  useEffect(() => {
-    fetchProducts()
-  }, [])
-
-  async function fetchProducts() {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching products:', error)
-        throw error
-      }
-      
-      setProducts(data || [])
-    } catch (error) {
-      console.error('Error fetching products:', error)
-      alert('שגיאה בטעינת המוצרים')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    
-    try {
-      const productData = {
-        name: formData.name.trim(),
-        category: formData.category,
-        base_price: parseFloat(formData.base_price) || 0,
-        price: formData.price ? parseFloat(formData.price) : parseFloat(formData.base_price) || 0,
-        description: formData.description || null,
-        image_url: formData.image_url || null,
-        active: formData.active,
-        updated_at: new Date().toISOString()
-      }
-
-      if (editingProduct) {
-        // עדכון מוצר קיים
-        console.log('Updating product:', editingProduct.id, productData)
-        
-        const { data, error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', editingProduct.id)
-          .select()
-
-        if (error) {
-          console.error('Update error:', error)
-          throw error
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול מוצרים</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        console.log('Update successful:', data)
-      } else {
-        // הוספת מוצר חדש
-        const newProduct = {
-          ...productData,
-          created_at: new Date().toISOString()
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            direction: rtl;
         }
 
-        console.log('Creating new product:', newProduct)
-        
-        const { data, error } = await supabase
-          .from('products')
-          .insert([newProduct])
-          .select()
-
-        if (error) {
-          console.error('Insert error:', error)
-          throw error
+        /* Header */
+        .header {
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
         }
 
-        console.log('Insert successful:', data)
-      }
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-      // רענון הרשימה
-      await fetchProducts()
-      
-      // איפוס הטופס
-      setFormData({ 
-        name: '', 
-        category: '', 
-        base_price: '',
-        price: '',
-        description: '',
-        image_url: '',
-        active: true 
-      })
-      setShowForm(false)
-      setEditingProduct(null)
-      
-      alert(editingProduct ? 'המוצר עודכן בהצלחה!' : 'המוצר נוסף בהצלחה!')
-      
-    } catch (error: any) {
-      console.error('Error saving product:', error)
-      alert('שגיאה בשמירת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
-    }
-  }
+        .page-title {
+            font-size: 24px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-  async function handleDelete(id: string, productName: string) {
-    if (!confirm(`האם אתה בטוח שברצונך למחוק את המוצר "${productName}"?`)) return
+        /* Main Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
 
-    try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id)
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
 
-      if (error) throw error
-      
-      await fetchProducts()
-      alert('המוצר נמחק בהצלחה')
-    } catch (error: any) {
-      console.error('Error deleting product:', error)
-      alert('שגיאה במחיקת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
-    }
-  }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
 
-  function handleEdit(product: Product) {
-    setEditingProduct(product)
-    setFormData({
-      name: product.name || '',
-      category: product.category || '',
-      base_price: product.base_price?.toString() || '',
-      price: product.price?.toString() || '',
-      description: product.description || '',
-      image_url: product.image_url || '',
-      active: product.active ?? true
-    })
-    setShowForm(true)
-  }
+        .btn-primary:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
 
-  function handleCancel() {
-    setShowForm(false)
-    setEditingProduct(null)
-    setFormData({ 
-      name: '', 
-      category: '', 
-      base_price: '',
-      price: '',
-      description: '',
-      image_url: '',
-      active: true 
-    })
-  }
+        /* Form Section */
+        .form-section {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
 
-  // פונקציה להצגת מחיר - מעדיפה price על base_price
-  function getDisplayPrice(product: Product): number {
-    return product.price ?? product.base_price ?? 0
-  }
+        .form-section.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-2xl">טוען מוצרים...</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">ניהול מוצרים</h1>
-        <button
-          onClick={() => {
-            setShowForm(!showForm)
-            if (!showForm) {
-              handleCancel()
+        @keyframes slideDown {
+            from { 
+                opacity: 0;
+                transform: translateY(-20px);
             }
-          }}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-        >
-          <span className="text-xl">+</span>
-          <span>הוסף מוצר</span>
-        </button>
-      </div>
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
-      {/* טופס הוספה/עריכה */}
-      {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
-          <h2 className="text-xl font-bold mb-4">
-            {editingProduct ? 'עריכת מוצר' : 'מוצר חדש'}
-          </h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                שם המוצר <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="לדוגמה: המבורגר"
-              />
-            </div>
+        .form-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4CAF50;
+        }
 
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                קטגוריה <span className="text-red-500">*</span>
-              </label>
-              <select
-                required
-                value={formData.category}
-                onChange={(e) => setFormData({...formData, category: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">בחר קטגוריה</option>
-                <option value="ארוחות">ארוחות</option>
-                <option value="משקאות">משקאות</option>
-                <option value="קינוחים">קינוחים</option>
-                <option value="תוספות">תוספות</option>
-                <option value="סלטים">סלטים</option>
-                <option value="מנות ראשונות">מנות ראשונות</option>
-                <option value="מבצעים">מבצעים</option>
-              </select>
-            </div>
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
 
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                מחיר בסיס <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                step="0.01"
-                min="0"
-                value={formData.base_price}
-                onChange={(e) => setFormData({...formData, base_price: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="0.00"
-              />
-            </div>
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
 
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                מחיר מכירה (אופציונלי)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.price}
-                onChange={(e) => setFormData({...formData, price: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="השאר ריק לשימוש במחיר הבסיס"
-              />
-            </div>
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-2">
-                תיאור
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                rows={3}
-                placeholder="תיאור המוצר..."
-              />
-            </div>
+        .form-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
 
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                קישור לתמונה
-              </label>
-              <input
-                type="url"
-                value={formData.image_url}
-                onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="https://..."
-              />
-            </div>
+        .required {
+            color: #dc3545;
+        }
 
-            <div className="flex items-center">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.active}
-                  onChange={(e) => setFormData({...formData, active: e.target.checked})}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium">מוצר פעיל</span>
-              </label>
-            </div>
+        .form-input, .form-select, .form-textarea {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+            transition: all 0.3s;
+            background-color: white;
+        }
 
-            <div className="md:col-span-2 flex gap-2">
-              <button
-                type="submit"
-                className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
-              >
-                {editingProduct ? 'עדכן מוצר' : 'הוסף מוצר'}
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                ביטול
-              </button>
-            </div>
-          </form>
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .form-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .btn-submit {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .btn-submit:hover {
+            background-color: #45a049;
+        }
+
+        .btn-cancel {
+            background-color: #e0e0e0;
+            color: #333;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .btn-cancel:hover {
+            background-color: #d0d0d0;
+        }
+
+        /* Table Section */
+        .table-section {
+            background-color: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background-color: #f8f9fa;
+        }
+
+        th {
+            padding: 15px;
+            text-align: right;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        tbody tr {
+            transition: background-color 0.2s;
+        }
+
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            background-color: #9C27B0;
+            color: white;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.active {
+            background-color: #d4f8d4;
+            color: #2e7d2e;
+        }
+
+        .status-badge.inactive {
+            background-color: #ffd4d4;
+            color: #c62828;
+        }
+
+        .price-display {
+            font-weight: 600;
+            color: #2e7d2e;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-edit, .btn-delete {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 5px;
+            transition: transform 0.2s;
+        }
+
+        .btn-edit:hover, .btn-delete:hover {
+            transform: scale(1.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        /* Statistics Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .stat-card.blue {
+            border-right: 4px solid #2196F3;
+        }
+
+        .stat-card.green {
+            border-right: 4px solid #4CAF50;
+        }
+
+        .stat-card.orange {
+            border-right: 4px solid #FF9800;
+        }
+
+        .stat-card.purple {
+            border-right: 4px solid #9C27B0;
+        }
+
+        .stat-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .stat-card.blue .stat-value { color: #2196F3; }
+        .stat-card.green .stat-value { color: #4CAF50; }
+        .stat-card.orange .stat-value { color: #FF9800; }
+        .stat-card.purple .stat-value { color: #9C27B0; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="page-title">
+                📦 ניהול מוצרים
+            </h1>
+            <button class="btn-primary" onclick="toggleForm()">
+                <span>➕</span>
+                <span>הוסף מוצר חדש</span>
+            </button>
         </div>
-      )}
+    </header>
 
-      {/* טבלת מוצרים */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">שם</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">קטגוריה</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">מחיר בסיס</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">מחיר מכירה</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">תיאור</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">סטטוס</th>
-                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500">פעולות</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {product.name}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                      {product.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    ₪{(product.base_price ?? 0).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {product.price ? (
-                      <span className="font-semibold text-green-600">
-                        ₪{product.price.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <span className="truncate block max-w-xs" title={product.description || ''}>
-                      {product.description || '-'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                      product.active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {product.active ? 'פעיל' : 'לא פעיל'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="text-blue-600 hover:text-blue-800 ml-4"
-                      title="ערוך"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDelete(product.id, product.name)}
-                      className="text-red-600 hover:text-red-800"
-                      title="מחק"
-                    >
-                      🗑️
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {products.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    אין מוצרים להצגה
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+    <div class="container">
+        <!-- Form Section -->
+        <div class="form-section" id="productForm">
+            <h2 class="form-title">➕ מוצר חדש</h2>
+            <form>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">שם המוצר <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="לדוגמה: המבורגר" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">קטגוריה <span class="required">*</span></label>
+                        <select class="form-select" required>
+                            <option value="">בחר קטגוריה</option>
+                            <option value="ארוחות">ארוחות</option>
+                            <option value="משקאות">משקאות</option>
+                            <option value="קינוחים">קינוחים</option>
+                            <option value="תוספות">תוספות</option>
+                            <option value="סלטים">סלטים</option>
+                            <option value="מנות ראשונות">מנות ראשונות</option>
+                            <option value="מבצעים">מבצעים</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">מחיר בסיס <span class="required">*</span></label>
+                        <input type="number" class="form-input" placeholder="0.00" step="0.01" min="0" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">מחיר מכירה</label>
+                        <input type="number" class="form-input" placeholder="אופציונלי" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label class="form-label">תיאור המוצר</label>
+                        <textarea class="form-textarea" placeholder="תיאור קצר של המוצר..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">קישור לתמונה</label>
+                        <input type="url" class="form-input" placeholder="https://...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">סטטוס</label>
+                        <div class="checkbox-group">
+                            <input type="checkbox" class="checkbox" id="activeStatus" checked>
+                            <label for="activeStatus">מוצר פעיל</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-buttons">
+                    <button type="submit" class="btn-submit">💾 שמור מוצר</button>
+                    <button type="button" class="btn-cancel" onclick="toggleForm()">ביטול</button>
+                </div>
+            </form>
         </div>
-      </div>
 
-      {/* סטטיסטיקה */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="text-blue-600 text-sm">סה"כ מוצרים</div>
-          <div className="text-2xl font-bold text-blue-800">{products.length}</div>
+        <!-- Statistics Cards -->
+        <div class="stats-grid">
+            <div class="stat-card blue">
+                <div class="stat-icon">📦</div>
+                <div class="stat-label">סה״כ מוצרים</div>
+                <div class="stat-value">24</div>
+            </div>
+            
+            <div class="stat-card green">
+                <div class="stat-icon">✅</div>
+                <div class="stat-label">מוצרים פעילים</div>
+                <div class="stat-value">22</div>
+            </div>
+            
+            <div class="stat-card orange">
+                <div class="stat-icon">⏸️</div>
+                <div class="stat-label">מוצרים לא פעילים</div>
+                <div class="stat-value">2</div>
+            </div>
+            
+            <div class="stat-card purple">
+                <div class="stat-icon">📋</div>
+                <div class="stat-label">קטגוריות</div>
+                <div class="stat-value">7</div>
+            </div>
         </div>
-        <div className="bg-green-50 rounded-lg p-4">
-          <div className="text-green-600 text-sm">מוצרים פעילים</div>
-          <div className="text-2xl font-bold text-green-800">
-            {products.filter(p => p.active).length}
-          </div>
+
+        <!-- Table Section -->
+        <div class="table-section">
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>שם המוצר</th>
+                            <th>קטגוריה</th>
+                            <th>מחיר בסיס</th>
+                            <th>מחיר מכירה</th>
+                            <th>תיאור</th>
+                            <th>סטטוס</th>
+                            <th>פעולות</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>המבורגר קלאסי</strong></td>
+                            <td><span class="category-badge">ארוחות</span></td>
+                            <td>₪45.00</td>
+                            <td class="price-display">₪42.90</td>
+                            <td>המבורגר 220 גרם עם חסה, עגבנייה ובצל</td>
+                            <td><span class="status-badge active">פעיל</span></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-edit" title="ערוך">✏️</button>
+                                    <button class="btn-delete" title="מחק">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>קולה זירו</strong></td>
+                            <td><span class="category-badge">משקאות</span></td>
+                            <td>₪12.00</td>
+                            <td>-</td>
+                            <td>פחית 330 מ״ל</td>
+                            <td><span class="status-badge active">פעיל</span></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-edit" title="ערוך">✏️</button>
+                                    <button class="btn-delete" title="מחק">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>סלט קיסר</strong></td>
+                            <td><span class="category-badge">סלטים</span></td>
+                            <td>₪38.00</td>
+                            <td class="price-display">₪35.00</td>
+                            <td>חסה רומית, קרוטונים, פרמז׳ן ורוטב קיסר</td>
+                            <td><span class="status-badge active">פעיל</span></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-edit" title="ערוך">✏️</button>
+                                    <button class="btn-delete" title="מחק">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>טירמיסו</strong></td>
+                            <td><span class="category-badge">קינוחים</span></td>
+                            <td>₪28.00</td>
+                            <td>-</td>
+                            <td>עוגת טירמיסו איטלקית מסורתית</td>
+                            <td><span class="status-badge inactive">לא פעיל</span></td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-edit" title="ערוך">✏️</button>
+                                    <button class="btn-delete" title="מחק">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <div className="bg-yellow-50 rounded-lg p-4">
-          <div className="text-yellow-600 text-sm">מוצרים לא פעילים</div>
-          <div className="text-2xl font-bold text-yellow-800">
-            {products.filter(p => !p.active).length}
-          </div>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-4">
-          <div className="text-purple-600 text-sm">קטגוריות</div>
-          <div className="text-2xl font-bold text-purple-800">
-            {[...new Set(products.map(p => p.category).filter(c => c))].length}
-          </div>
-        </div>
-      </div>
     </div>
-  )
-}
+
+    <script>
+        function toggleForm() {
+            const form = document.getElementById('productForm');
+            form.classList.toggle('active');
+        }
+
+        // Demo interactions
+        document.querySelectorAll('.btn-edit').forEach(btn => {
+            btn.addEventListener('click', () => {
+                toggleForm();
+                document.querySelector('.form-title').textContent = '✏️ עריכת מוצר';
+            });
+        });
+
+        document.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if(confirm('האם אתה בטוח שברצונך למחוק את המוצר?')) {
+                    alert('המוצר נמחק בהצלחה!');
+                }
+            });
+        });
+
+        document.querySelector('form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('המוצר נשמר בהצלחה!');
+            toggleForm();
+        });
+    </script>
+</body>
+</html>

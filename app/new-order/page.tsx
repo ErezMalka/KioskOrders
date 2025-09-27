@@ -818,10 +818,10 @@ export default function NewOrderPage() {
                 </tbody>
                 <tfoot>
                   <tr style={{ backgroundColor: '#f5f5f5' }}>
-                    <td colSpan="5" style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', fontSize: '18px' }}>
+                    <td colSpan={5} style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', fontSize: '18px' }}>
                       סה"כ להזמנה:
                     </td>
-                    <td colSpan="2" style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px', color: '#2196F3' }}>
+                    <td colSpan={2} style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px', color: '#2196F3' }}>
                       ₪{calculateTotal().toFixed(2)}
                     </td>
                   </tr>

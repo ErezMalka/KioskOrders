@@ -1,369 +1,687 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { 
-  Search, Plus, Edit2, Trash2, Phone, Mail, MapPin, Building, 
-  User, Calendar, DollarSign, Package, FileText, Download, Upload,
-  Star, Check, AlertCircle, Sparkles, Users, Trophy, Zap, 
-  Shield, TrendingUp, Target, Smartphone, Filter,
-  ChevronRight, Activity, Award, Layers, Command,
-  BarChart3, PieChart, TrendingDown, ArrowUpRight, Gem,
-  Rocket, Crown, Flame, Heart, MessageCircle, Bell, Settings,
-  Grid, LayoutGrid, Table
-} from 'lucide-react'
-import { supabase } from '@/lib/supabaseClient'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Customer {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  address?: string
-  city?: string
-  created_at: string
-  [key: string]: any
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  created_at: string;
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     address: '',
     city: ''
-  })
+  });
 
   useEffect(() => {
-    fetchCustomers()
-  }, [])
+    checkUser();
+    fetchCustomers();
+  }, []);
+
+  const checkUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.log('No user found, redirecting to login');
+        router.push('/login');
+        return;
+      }
+
+      setUser(user);
+      console.log('User loaded:', user.email);
+    } catch (error) {
+      console.error('Error checking user:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   async function fetchCustomers() {
     try {
-      setLoading(true)
+      setLoading(true);
       const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (error) throw error
-      setCustomers(data || [])
+      if (error) throw error;
+      setCustomers(data || []);
     } catch (error) {
-      console.error('Error fetching customers:', error)
+      console.error('Error fetching customers:', error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+    e.preventDefault();
     
     try {
       if (editingCustomer) {
         const { error } = await supabase
           .from('customers')
           .update(formData)
-          .eq('id', editingCustomer.id)
+          .eq('id', editingCustomer.id);
 
-        if (error) throw error
+        if (error) throw error;
       } else {
         const { error } = await supabase
           .from('customers')
-          .insert([formData])
+          .insert([formData]);
 
-        if (error) throw error
+        if (error) throw error;
       }
 
-      await fetchCustomers()
-      setShowForm(false)
-      setEditingCustomer(null)
-      setFormData({ name: '', email: '', phone: '', address: '', city: '' })
+      await fetchCustomers();
+      setShowForm(false);
+      setEditingCustomer(null);
+      setFormData({ name: '', email: '', phone: '', address: '', city: '' });
       
     } catch (error) {
-      console.error('Error saving customer:', error)
-      alert('שגיאה בשמירת הלקוח')
+      console.error('Error saving customer:', error);
+      alert('שגיאה בשמירת הלקוח');
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('האם אתה בטוח שברצונך למחוק את הלקוח?')) return
+    if (!confirm('האם אתה בטוח שברצונך למחוק את הלקוח?')) return;
 
     try {
       const { error } = await supabase
         .from('customers')
         .delete()
-        .eq('id', id)
+        .eq('id', id);
 
-      if (error) throw error
-      await fetchCustomers()
+      if (error) throw error;
+      await fetchCustomers();
     } catch (error) {
-      console.error('Error deleting customer:', error)
-      alert('שגיאה במחיקת הלקוח')
+      console.error('Error deleting customer:', error);
+      alert('שגיאה במחיקת הלקוח');
     }
   }
 
   function handleEdit(customer: Customer) {
-    setEditingCustomer(customer)
+    setEditingCustomer(customer);
     setFormData({
       name: customer.name || '',
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
       city: customer.city || ''
-    })
-    setShowForm(true)
+    });
+    setShowForm(true);
   }
 
   const filteredCustomers = customers.filter(customer => {
-    const searchLower = searchQuery.toLowerCase()
+    const searchLower = searchQuery.toLowerCase();
     return (
       customer.name?.toLowerCase().includes(searchLower) ||
       customer.email?.toLowerCase().includes(searchLower) ||
       customer.phone?.includes(searchQuery) ||
       customer.city?.toLowerCase().includes(searchLower)
-    )
-  })
+    );
+  });
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-2xl">טוען לקוחות...</div>
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f5f5f5',
+        direction: 'rtl'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
+          <h2>טוען לקוחות...</h2>
+        </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f5f5f5',
+      direction: 'rtl'
+    }}>
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Users className="w-8 h-8" />
-          ניהול לקוחות
-        </h1>
-        <button
-          onClick={() => {
-            setShowForm(!showForm)
-            if (!showForm) {
-              setEditingCustomer(null)
-              setFormData({ name: '', email: '', phone: '', address: '', city: '' })
-            }
-          }}
-          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          הוסף לקוח
-        </button>
-      </div>
-
-      {/* Search Bar */}
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="חיפוש לפי שם, אימייל, טלפון או עיר..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      <header style={{
+        backgroundColor: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        padding: '20px'
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <h1 style={{ 
+            margin: 0,
+            fontSize: '24px',
+            color: '#333',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            👥 ניהול לקוחות
+          </h1>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <button
+              onClick={() => router.push('/dashboard')}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              חזרה לדשבורד
+            </button>
+            <span style={{ color: '#666' }}>
+              👤 {user?.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              יציאה
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Form */}
-      {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
-          <h2 className="text-xl font-bold mb-4">
-            {editingCustomer ? 'עריכת לקוח' : 'לקוח חדש'}
-          </h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <User className="inline w-4 h-4 ml-1" />
-                שם הלקוח *
-              </label>
+      <main style={{
+        maxWidth: '1200px',
+        margin: '40px auto',
+        padding: '0 20px'
+      }}>
+        {/* Action Bar */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '30px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          <div style={{ flex: 1, minWidth: '250px', maxWidth: '500px' }}>
+            <div style={{ position: 'relative' }}>
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '20px'
+              }}>
+                🔍
+              </span>
               <input
                 type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <Mail className="inline w-4 h-4 ml-1" />
-                אימייל
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <Phone className="inline w-4 h-4 ml-1" />
-                טלפון
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <MapPin className="inline w-4 h-4 ml-1" />
-                כתובת
-              </label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                <Building className="inline w-4 h-4 ml-1" />
-                עיר
-              </label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({...formData, city: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="md:col-span-2 flex gap-2">
-              <button
-                type="submit"
-                className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600"
-              >
-                {editingCustomer ? 'עדכן' : 'הוסף'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false)
-                  setEditingCustomer(null)
-                  setFormData({ name: '', email: '', phone: '', address: '', city: '' })
+                placeholder="חיפוש לפי שם, אימייל, טלפון או עיר..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 40px 10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '14px'
                 }}
-                className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400"
-              >
-                ביטול
-              </button>
+              />
             </div>
-          </form>
+          </div>
+          
+          <button
+            onClick={() => {
+              setShowForm(!showForm);
+              if (!showForm) {
+                setEditingCustomer(null);
+                setFormData({ name: '', email: '', phone: '', address: '', city: '' });
+              }
+            }}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            ➕ לקוח חדש
+          </button>
         </div>
-      )}
 
-      {/* Customers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredCustomers.map((customer) => (
-          <div key={customer.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-5">
-            <div className="flex justify-between items-start mb-3">
-              <h3 className="text-lg font-semibold text-gray-900">{customer.name}</h3>
-              <div className="flex gap-1">
+        {/* Form */}
+        {showForm && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '30px',
+            marginBottom: '30px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <h2 style={{ 
+              fontSize: '20px',
+              marginBottom: '20px',
+              color: '#333'
+            }}>
+              {editingCustomer ? 'עריכת לקוח' : 'הוספת לקוח חדש'}
+            </h2>
+            
+            <form onSubmit={handleSubmit}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '20px',
+                marginBottom: '20px'
+              }}>
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    👤 שם הלקוח *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📧 אימייל
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📞 טלפון
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    📍 כתובת
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    🏢 עיר
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({...formData, city: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  onClick={() => handleEdit(customer)}
-                  className="text-blue-600 hover:text-blue-800 p-1"
+                  type="submit"
+                  style={{
+                    padding: '10px 24px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
                 >
-                  <Edit2 className="w-4 h-4" />
+                  {editingCustomer ? '💾 עדכן' : '➕ הוסף'}
                 </button>
                 <button
-                  onClick={() => handleDelete(customer.id)}
-                  className="text-red-600 hover:text-red-800 p-1"
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingCustomer(null);
+                    setFormData({ name: '', email: '', phone: '', address: '', city: '' });
+                  }}
+                  style={{
+                    padding: '10px 24px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  ביטול
                 </button>
               </div>
+            </form>
+          </div>
+        )}
+
+        {/* Statistics Cards */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '20px',
+          marginBottom: '30px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #2196F3'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>👥</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>סה״כ לקוחות</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3', margin: 0 }}>
+              {customers.length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>לקוחות רשומים במערכת</p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #4CAF50'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📅</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>לקוחות החודש</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>
+              {customers.filter(c => {
+                const createdDate = new Date(c.created_at);
+                const now = new Date();
+                return createdDate.getMonth() === now.getMonth() && 
+                       createdDate.getFullYear() === now.getFullYear();
+              }).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>נוספו החודש</p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #FF9800'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📧</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>עם אימייל</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800', margin: 0 }}>
+              {customers.filter(c => c.email).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>כתובות אימייל</p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '25px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            borderRight: '4px solid #9C27B0'
+          }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📞</div>
+            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>עם טלפון</h3>
+            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0', margin: 0 }}>
+              {customers.filter(c => c.phone).length}
+            </p>
+            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>מספרי טלפון</p>
+          </div>
+        </div>
+
+        {/* Customers Grid */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          padding: '30px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <h3 style={{ 
+            fontSize: '20px',
+            marginBottom: '20px',
+            color: '#333'
+          }}>
+            רשימת לקוחות
+          </h3>
+
+          {filteredCustomers.length > 0 ? (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '20px'
+            }}>
+              {filteredCustomers.map((customer) => (
+                <div key={customer.id} style={{
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  border: '1px solid #e9ecef',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    display: 'flex',
+                    gap: '5px'
+                  }}>
+                    <button
+                      onClick={() => handleEdit(customer)}
+                      style={{
+                        padding: '5px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                      }}
+                      title="עריכה"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDelete(customer.id)}
+                      style={{
+                        padding: '5px',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                      }}
+                      title="מחיקה"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+
+                  <h4 style={{
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    marginBottom: '15px',
+                    color: '#333',
+                    paddingLeft: '60px'
+                  }}>
+                    {customer.name}
+                  </h4>
+
+                  <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
+                    {customer.email && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📧 {customer.email}
+                      </div>
+                    )}
+                    {customer.phone && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📞 {customer.phone}
+                      </div>
+                    )}
+                    {customer.city && (
+                      <div style={{ marginBottom: '8px' }}>
+                        🏢 {customer.city}
+                      </div>
+                    )}
+                    {customer.address && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📍 {customer.address}
+                      </div>
+                    )}
+                    <div style={{
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #dee2e6',
+                      fontSize: '12px',
+                      color: '#999'
+                    }}>
+                      📅 {new Date(customer.created_at).toLocaleDateString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <div className="space-y-2 text-sm">
-              {customer.email && (
-                <div className="flex items-center text-gray-600">
-                  <Mail className="w-4 h-4 ml-2" />
-                  {customer.email}
-                </div>
+          ) : (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#999'
+            }}>
+              <div style={{ fontSize: '64px', marginBottom: '20px' }}>👥</div>
+              <p style={{ fontSize: '18px' }}>
+                {searchQuery ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+              </p>
+              {!searchQuery && (
+                <p style={{ fontSize: '14px', marginTop: '10px' }}>
+                  לחץ על "לקוח חדש" כדי להוסיף את הלקוח הראשון
+                </p>
               )}
-              {customer.phone && (
-                <div className="flex items-center text-gray-600">
-                  <Phone className="w-4 h-4 ml-2" />
-                  {customer.phone}
-                </div>
-              )}
-              {customer.city && (
-                <div className="flex items-center text-gray-600">
-                  <Building className="w-4 h-4 ml-2" />
-                  {customer.city}
-                </div>
-              )}
-              {customer.address && (
-                <div className="flex items-center text-gray-600">
-                  <MapPin className="w-4 h-4 ml-2" />
-                  {customer.address}
-                </div>
-              )}
-              <div className="flex items-center text-gray-500 text-xs pt-2 border-t">
-                <Calendar className="w-3 h-3 ml-1" />
-                {new Date(customer.created_at).toLocaleDateString('he-IL')}
-              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {filteredCustomers.length === 0 && (
-        <div className="text-center py-12">
-          <Users className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-500">
-            {searchQuery ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
-          </p>
+          )}
         </div>
-      )}
-
-      {/* Statistics */}
-      <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="text-blue-600 text-sm">סה"כ לקוחות</div>
-          <div className="text-2xl font-bold text-blue-800">{customers.length}</div>
-        </div>
-        <div className="bg-green-50 rounded-lg p-4">
-          <div className="text-green-600 text-sm">לקוחות החודש</div>
-          <div className="text-2xl font-bold text-green-800">
-            {customers.filter(c => {
-              const createdDate = new Date(c.created_at)
-              const now = new Date()
-              return createdDate.getMonth() === now.getMonth() && 
-                     createdDate.getFullYear() === now.getFullYear()
-            }).length}
-          </div>
-        </div>
-        <div className="bg-yellow-50 rounded-lg p-4">
-          <div className="text-yellow-600 text-sm">עם אימייל</div>
-          <div className="text-2xl font-bold text-yellow-800">
-            {customers.filter(c => c.email).length}
-          </div>
-        </div>
-        <div className="bg-purple-50 rounded-lg p-4">
-          <div className="text-purple-600 text-sm">עם טלפון</div>
-          <div className="text-2xl font-bold text-purple-800">
-            {customers.filter(c => c.phone).length}
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
-  )
+  );
 }

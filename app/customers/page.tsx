@@ -6,9 +6,13 @@ import { supabase } from '@/lib/supabaseClient';
 
 interface Customer {
   id: string;
+  org_id?: string;
   name: string;
+  legal_id?: string;
+  contact_name?: string;
   email?: string;
   phone?: string;
+  address?: string;
   status?: string;
   notes?: string;
   created_at: string;
@@ -53,8 +57,11 @@ export default function CustomersPage() {
   
   const [formData, setFormData] = useState({
     name: '',
+    legal_id: '',
+    contact_name: '',
     email: '',
     phone: '',
+    address: '',
     status: 'ליד חדש',
     notes: '',
     custom_fields: {}
@@ -121,17 +128,35 @@ export default function CustomersPage() {
     e.preventDefault();
     
     try {
+      // מכין את הנתונים לשמירה - שולח רק שדות שקיימים בטבלה
+      const dataToSave: any = {
+        name: formData.name || null,
+        legal_id: formData.legal_id || null,
+        contact_name: formData.contact_name || null,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        address: formData.address || null,
+        notes: formData.notes || null
+      };
+
+      // אם העמודות החדשות קיימות, נוסיף אותן
+      // נבדוק אם הן קיימות בלקוח קיים
+      if (customers.length > 0 && 'status' in customers[0]) {
+        dataToSave.status = formData.status || 'ליד חדש';
+        dataToSave.custom_fields = formData.custom_fields || {};
+      }
+
       if (editingCustomer) {
         const { error } = await supabase
           .from('customers')
-          .update(formData)
+          .update(dataToSave)
           .eq('id', editingCustomer.id);
 
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('customers')
-          .insert([formData]);
+          .insert([dataToSave]);
 
         if (error) throw error;
       }
@@ -140,9 +165,12 @@ export default function CustomersPage() {
       setShowForm(false);
       setEditingCustomer(null);
       setFormData({ 
-        name: '', 
+        name: '',
+        legal_id: '',
+        contact_name: '',
         email: '', 
-        phone: '', 
+        phone: '',
+        address: '',
         status: 'ליד חדש',
         notes: '',
         custom_fields: {}
@@ -175,8 +203,11 @@ export default function CustomersPage() {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name || '',
+      legal_id: customer.legal_id || '',
+      contact_name: customer.contact_name || '',
       email: customer.email || '',
       phone: customer.phone || '',
+      address: customer.address || '',
       status: customer.status || 'ליד חדש',
       notes: customer.notes || '',
       custom_fields: customer.custom_fields || {}
@@ -715,12 +746,58 @@ export default function CustomersPage() {
                     fontSize: '14px',
                     color: '#666'
                   }}>
-                    👤 שם הלקוח
+                    👤 שם הלקוח / חברה
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    🏢 ח.פ / ע.מ
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.legal_id}
+                    onChange={(e) => setFormData({...formData, legal_id: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    color: '#666'
+                  }}>
+                    👤 איש קשר
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contact_name}
+                    onChange={(e) => setFormData({...formData, contact_name: e.target.value})}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
@@ -784,26 +861,20 @@ export default function CustomersPage() {
                     fontSize: '14px',
                     color: '#666'
                   }}>
-                    🏷️ סטטוס
+                    📍 כתובת
                   </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({...formData, status: e.target.value})}
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
                       border: '1px solid #ddd',
                       borderRadius: '6px',
-                      fontSize: '14px',
-                      cursor: 'pointer'
+                      fontSize: '14px'
                     }}
-                  >
-                    {statuses.map(status => (
-                      <option key={status.id} value={status.name}>
-                        {status.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 {/* Custom Fields */}
@@ -904,9 +975,12 @@ export default function CustomersPage() {
                     setShowForm(false);
                     setEditingCustomer(null);
                     setFormData({ 
-                      name: '', 
+                      name: '',
+                      legal_id: '',
+                      contact_name: '',
                       email: '', 
-                      phone: '', 
+                      phone: '',
+                      address: '',
                       status: 'ליד חדש',
                       notes: '',
                       custom_fields: {}
@@ -1063,6 +1137,11 @@ export default function CustomersPage() {
                   </h4>
 
                   <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.8' }}>
+                    {customer.contact_name && (
+                      <div style={{ marginBottom: '8px' }}>
+                        👤 {customer.contact_name}
+                      </div>
+                    )}
                     {customer.email && (
                       <div style={{ marginBottom: '8px' }}>
                         📧 {customer.email}
@@ -1071,6 +1150,16 @@ export default function CustomersPage() {
                     {customer.phone && (
                       <div style={{ marginBottom: '8px' }}>
                         📞 {customer.phone}
+                      </div>
+                    )}
+                    {customer.legal_id && (
+                      <div style={{ marginBottom: '8px' }}>
+                        🏢 ח.פ: {customer.legal_id}
+                      </div>
+                    )}
+                    {customer.address && (
+                      <div style={{ marginBottom: '8px' }}>
+                        📍 {customer.address}
                       </div>
                     )}
                     {customer.notes && (

@@ -42,7 +42,16 @@ export default function ProductsPage() {
         throw error
       }
       
-      setProducts(data || [])
+      // וודא שכל מוצר יש לו ערך price תקין
+      const validatedProducts = (data || []).map(product => ({
+        ...product,
+        price: product.price ?? 0, // אם price הוא null או undefined, שים 0
+        name: product.name || 'ללא שם',
+        category: product.category || 'כללי',
+        active: product.active ?? true
+      }))
+      
+      setProducts(validatedProducts)
     } catch (error) {
       console.error('Error fetching products:', error)
       alert('שגיאה בטעינת המוצרים')
@@ -56,11 +65,16 @@ export default function ProductsPage() {
     
     try {
       const productData = {
-        name: formData.name,
-        price: parseFloat(formData.price),
+        name: formData.name.trim(),
+        price: parseFloat(formData.price) || 0,
         category: formData.category,
-        active: formData.active,
-        updated_at: new Date().toISOString()
+        active: formData.active
+      }
+
+      // וידוא שהמחיר תקין
+      if (isNaN(productData.price) || productData.price < 0) {
+        alert('נא להזין מחיר תקין')
+        return
       }
 
       if (editingProduct) {
@@ -72,7 +86,6 @@ export default function ProductsPage() {
           .update(productData)
           .eq('id', editingProduct.id)
           .select()
-          .single()
 
         if (error) {
           console.error('Update error details:', error)
@@ -82,18 +95,12 @@ export default function ProductsPage() {
         console.log('Update successful:', data)
       } else {
         // הוספת מוצר חדש
-        const newProduct = {
-          ...productData,
-          created_at: new Date().toISOString()
-        }
-
-        console.log('Creating new product:', newProduct)
+        console.log('Creating new product:', productData)
         
         const { data, error } = await supabase
           .from('products')
-          .insert(newProduct)
+          .insert([productData])
           .select()
-          .single()
 
         if (error) {
           console.error('Insert error details:', error)
@@ -115,23 +122,7 @@ export default function ProductsPage() {
       
     } catch (error: any) {
       console.error('Error saving product:', error)
-      
-      // הצגת הודעת שגיאה מפורטת
-      let errorMessage = 'שגיאה בשמירת המוצר'
-      
-      if (error?.message) {
-        errorMessage += ': ' + error.message
-      }
-      
-      if (error?.details) {
-        errorMessage += '\nפרטים: ' + error.details
-      }
-      
-      if (error?.hint) {
-        errorMessage += '\nהצעה: ' + error.hint
-      }
-      
-      alert(errorMessage)
+      alert('שגיאה בשמירת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
     }
   }
 
@@ -162,10 +153,10 @@ export default function ProductsPage() {
   function handleEdit(product: Product) {
     setEditingProduct(product)
     setFormData({
-      name: product.name,
-      price: product.price.toString(),
-      category: product.category,
-      active: product.active
+      name: product.name || '',
+      price: (product.price ?? 0).toString(),
+      category: product.category || '',
+      active: product.active ?? true
     })
     setShowForm(true)
   }
@@ -174,6 +165,22 @@ export default function ProductsPage() {
     setShowForm(false)
     setEditingProduct(null)
     setFormData({ name: '', price: '', category: '', active: true })
+  }
+
+  // פונקציה להצגת מחיר בטוח
+  function formatPrice(price: number | null | undefined): string {
+    const validPrice = price ?? 0
+    return validPrice.toFixed(2)
+  }
+
+  // פונקציה לפורמט תאריך בטוח
+  function formatDate(dateString: string | null | undefined): string {
+    if (!dateString) return 'לא ידוע'
+    try {
+      return new Date(dateString).toLocaleDateString('he-IL')
+    } catch {
+      return 'לא ידוע'
+    }
   }
 
   if (loading) {
@@ -310,14 +317,14 @@ export default function ProductsPage() {
               {products.map((product) => (
                 <tr key={product.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    {product.name}
+                    {product.name || 'ללא שם'}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    ₪{product.price.toFixed(2)}
+                    ₪{formatPrice(product.price)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
-                      {product.category}
+                      {product.category || 'כללי'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -330,7 +337,7 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(product.created_at).toLocaleDateString('he-IL')}
+                    {formatDate(product.created_at)}
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <button
@@ -383,7 +390,7 @@ export default function ProductsPage() {
         <div className="bg-purple-50 rounded-lg p-4">
           <div className="text-purple-600 text-sm">קטגוריות</div>
           <div className="text-2xl font-bold text-purple-800">
-            {[...new Set(products.map(p => p.category))].length}
+            {[...new Set(products.map(p => p.category).filter(c => c))].length}
           </div>
         </div>
       </div>

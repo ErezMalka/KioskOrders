@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, 
   Search, 
@@ -68,7 +68,10 @@ export default function CustomersPage() {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [showFieldManager, setShowFieldManager] = useState(false);
   
-  const supabase = createClient();
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const [formData, setFormData] = useState({
     name: '',

@@ -26,7 +26,6 @@ interface Customer {
   email: string;
   phone: string;
   address?: string;
-  city?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -44,8 +43,7 @@ export default function CustomersPage() {
     name: '',
     email: '',
     phone: '',
-    address: '',
-    city: ''
+    address: ''
   });
 
   useEffect(() => {
@@ -100,8 +98,7 @@ export default function CustomersPage() {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          address: formData.address || null,
-          city: formData.city || null
+          address: formData.address || null
         }])
         .select();
 
@@ -138,8 +135,7 @@ export default function CustomersPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        address: formData.address || null,
-        city: formData.city || null
+        address: formData.address || null
       };
 
       console.log('Updating customer:', selectedCustomer.id, updateData);
@@ -202,8 +198,7 @@ export default function CustomersPage() {
       name: '',
       email: '',
       phone: '',
-      address: '',
-      city: ''
+      address: ''
     });
     setSelectedCustomer(null);
     setError(null);
@@ -215,8 +210,7 @@ export default function CustomersPage() {
       name: customer.name,
       email: customer.email,
       phone: customer.phone,
-      address: customer.address || '',
-      city: customer.city || ''
+      address: customer.address || ''
     });
     setError(null);
     setShowEditModal(true);
@@ -415,7 +409,7 @@ export default function CustomersPage() {
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>שם</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>אימייל</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>טלפון</th>
-                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>עיר</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>כתובת</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>תאריך הוספה</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>פעולות</th>
               </tr>
@@ -433,7 +427,7 @@ export default function CustomersPage() {
                     <td style={{ padding: '15px', fontWeight: '500' }}>{customer.name}</td>
                     <td style={{ padding: '15px' }}>{customer.email}</td>
                     <td style={{ padding: '15px', direction: 'ltr', textAlign: 'right' }}>{customer.phone}</td>
-                    <td style={{ padding: '15px' }}>{customer.city || '-'}</td>
+                    <td style={{ padding: '15px' }}>{customer.address || '-'}</td>
                     <td style={{ padding: '15px', color: '#666' }}>
                       {new Date(customer.created_at).toLocaleDateString('he-IL')}
                     </td>
@@ -602,7 +596,7 @@ export default function CustomersPage() {
               />
             </div>
 
-            <div style={{ marginBottom: '15px' }}>
+            <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
                 כתובת
               </label>
@@ -618,25 +612,6 @@ export default function CustomersPage() {
                   fontSize: '16px'
                 }}
                 placeholder="רחוב ומספר"
-              />
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                עיר
-              </label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({...formData, city: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '16px'
-                }}
-                placeholder="עיר"
               />
             </div>
 

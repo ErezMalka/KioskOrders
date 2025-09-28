@@ -1,34 +1,11 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 
 export default function ProductCategoryTabs() {
   const router = useRouter()
   const pathname = usePathname()
   const activeTab = pathname.includes('categories') ? 'categories' : 'products'
-  const [counts, setCounts] = useState({ products: 0, categories: 0 })
-
-  useEffect(() => {
-    fetchCounts()
-  }, [])
-
-  const fetchCounts = async () => {
-    try {
-      const [productsResult, categoriesResult] = await Promise.all([
-        supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('categories').select('id', { count: 'exact', head: true })
-      ])
-
-      setCounts({
-        products: productsResult.count || 0,
-        categories: categoriesResult.count || 0
-      })
-    } catch (error) {
-      console.error('Error fetching counts:', error)
-    }
-  }
 
   return (
     <div style={{
@@ -72,16 +49,6 @@ export default function ProductCategoryTabs() {
           }}
         >
           📦 מוצרים
-          {counts.products > 0 && (
-            <span style={{
-              backgroundColor: activeTab === 'products' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontSize: '14px'
-            }}>
-              {counts.products}
-            </span>
-          )}
         </button>
         
         <button
@@ -112,16 +79,6 @@ export default function ProductCategoryTabs() {
           }}
         >
           📁 קטגוריות
-          {counts.categories > 0 && (
-            <span style={{
-              backgroundColor: activeTab === 'categories' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontSize: '14px'
-            }}>
-              {counts.categories}
-            </span>
-          )}
         </button>
       </div>
     </div>

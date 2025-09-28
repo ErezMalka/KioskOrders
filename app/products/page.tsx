@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
-import ProductCategoryTabs from '@/components/ProductCategoryTabs'
+import ProductCategoryTabs from '../components/ProductCategoryTabs'
 
 interface Product {
   id: string

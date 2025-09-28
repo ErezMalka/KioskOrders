@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import { 
   Plus, 
   Search, 
@@ -68,7 +68,7 @@ export default function CustomersPage() {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [showFieldManager, setShowFieldManager] = useState(false);
   
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
 
   const [formData, setFormData] = useState({
     name: '',

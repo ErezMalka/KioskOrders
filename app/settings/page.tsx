@@ -1,46 +1,111 @@
+// app/users/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-interface UserSettings {
+// Type definitions
+interface User {
   id: string;
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   role: string;
-  green_api_instance?: string;
-  green_api_token?: string;
-  whatsapp_number?: string;
+  permissions: string[];
+  is_active: boolean;
+  created_at: string;
+  last_login?: string;
 }
 
-export default function SettingsPage() {
+interface Permission {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+}
+
+interface RoleTemplate {
+  name: string;
+  permissions: string[];
+}
+
+export default function UsersManagementPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
-  const [testingWhatsApp, setTestingWhatsApp] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('users');
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [message, setMessage] = useState({ text: '', type: '' });
   
-  const [settings, setSettings] = useState<UserSettings>({
-    id: '',
+  // Form state
+  const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
+    password: '',
     role: '',
-    green_api_instance: '',
-    green_api_token: '',
-    whatsapp_number: ''
+    permissions: [] as string[],
+    send_email: true
   });
 
-  const [showApiToken, setShowApiToken] = useState(false);
+  // Role templates
+  const roleTemplates: Record<string, RoleTemplate> = {
+    admin: {
+      name: 'מנהל ראשי',
+      permissions: ['view_customers', 'edit_customers', 'add_customers', 'delete_customers', 
+                   'view_products', 'edit_products', 'add_products', 'delete_products',
+                   'create_quotes', 'approve_quotes', 'give_discounts', 'view_reports', 
+                   'manage_users', 'system_settings']
+    },
+    sales_manager: {
+      name: 'מנהל מכירות',
+      permissions: ['view_customers', 'edit_customers', 'add_customers', 'view_products', 
+                   'create_quotes', 'approve_quotes', 'give_discounts', 'view_reports']
+    },
+    senior_sales: {
+      name: 'סוכן מכירות בכיר',
+      permissions: ['view_customers', 'edit_customers', 'add_customers', 'view_products', 
+                   'create_quotes', 'give_discounts']
+    },
+    junior_sales: {
+      name: 'סוכן מכירות חדש',
+      permissions: ['view_customers', 'view_products', 'create_quotes']
+    },
+    viewer: {
+      name: 'צופה בלבד',
+      permissions: ['view_customers', 'view_products']
+    }
+  };
+
+  // Available permissions
+  const availablePermissions = [
+    { id: 'view_customers', name: 'צפייה בלקוחות', category: 'customers' },
+    { id: 'edit_customers', name: 'עריכת לקוחות', category: 'customers' },
+    { id: 'add_customers', name: 'הוספת לקוחות', category: 'customers' },
+    { id: 'delete_customers', name: 'מחיקת לקוחות', category: 'customers' },
+    { id: 'view_products', name: 'צפייה במוצרים', category: 'products' },
+    { id: 'edit_products', name: 'עריכת מוצרים', category: 'products' },
+    { id: 'add_products', name: 'הוספת מוצרים', category: 'products' },
+    { id: 'delete_products', name: 'מחיקת מוצרים', category: 'products' },
+    { id: 'create_quotes', name: 'יצירת הצעות מחיר', category: 'quotes' },
+    { id: 'approve_quotes', name: 'אישור הצעות מחיר', category: 'quotes' },
+    { id: 'give_discounts', name: 'מתן הנחות', category: 'quotes' },
+    { id: 'view_reports', name: 'צפייה בדוחות', category: 'reports' },
+    { id: 'export_reports', name: 'ייצוא דוחות', category: 'reports' },
+    { id: 'manage_users', name: 'ניהול משתמשים', category: 'system' },
+    { id: 'system_settings', name: 'הגדרות מערכת', category: 'system' },
+    { id: 'whatsapp_send', name: 'שליחת הודעות WhatsApp', category: 'communication' }
+  ];
 
   useEffect(() => {
-    loadUserSettings();
+    checkAuth();
   }, []);
 
-  const loadUserSettings = async () => {
+  const checkAuth = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -49,418 +114,387 @@ export default function SettingsPage() {
         return;
       }
 
-      // Load user profile
-      const { data: profile, error } = await supabase
+      // Check if user has permission to manage users
+      const { data: profile } = await supabase
         .from('profiles')
-        .select('*')
+        .select('permissions')
         .eq('id', user.id)
         .single();
 
-      if (error) {
-        console.error('Error loading profile:', error);
-        setMessage('שגיאה בטעינת ההגדרות');
-        setMessageType('error');
-      } else if (profile) {
-        setSettings({
-          id: profile.id,
-          name: profile.name || '',
-          email: user.email || '',
-          phone: profile.phone || '',
-          role: profile.role || '',
-          green_api_instance: profile.green_api_instance || '',
-          green_api_token: profile.green_api_token || '',
-          whatsapp_number: profile.whatsapp_number || ''
-        });
+      if (!profile?.permissions?.includes('manage_users')) {
+        showMessage('אין לך הרשאות לצפות בדף זה', 'error');
+        router.push('/dashboard');
+        return;
       }
+
+      loadUsers();
     } catch (error) {
-      console.error('Error:', error);
-      setMessage('שגיאה בטעינת ההגדרות');
-      setMessageType('error');
+      console.error('Error checking auth:', error);
+      router.push('/login');
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      showMessage('שגיאה בטעינת המשתמשים', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage('');
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setFormData({ ...formData, password });
+  };
+
+  const handleRoleChange = (role: string) => {
+    setFormData({
+      ...formData,
+      role,
+      permissions: roleTemplates[role]?.permissions || []
+    });
+  };
+
+  const handlePermissionToggle = (permissionId: string) => {
+    const newPermissions = formData.permissions.includes(permissionId)
+      ? formData.permissions.filter(p => p !== permissionId)
+      : [...formData.permissions, permissionId];
+    
+    setFormData({ ...formData, permissions: newPermissions });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      if (editingUser) {
+        // Update existing user
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            name: formData.name,
+            phone: formData.phone,
+            role: formData.role,
+            permissions: formData.permissions,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingUser.id);
+
+        if (error) throw error;
+        showMessage('המשתמש עודכן בהצלחה', 'success');
+      } else {
+        // Create new user via Edge Function
+        const { data, error } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: formData.email,
+            password: formData.password,
+            name: formData.name,
+            phone: formData.phone,
+            role: formData.role,
+            permissions: formData.permissions,
+            send_email: formData.send_email
+          }
+        });
+
+        if (error) throw error;
+        showMessage('המשתמש נוסף בהצלחה! פרטי הגישה נשלחו באימייל', 'success');
+      }
+
+      setShowModal(false);
+      loadUsers();
+      resetForm();
+    } catch (error) {
+      console.error('Error saving user:', error);
+      showMessage('שגיאה בשמירת המשתמש', 'error');
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    if (!confirm('האם לאפס את הסיסמה ולשלוח סיסמה חדשה למשתמש?')) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { userId }
+      });
+
+      if (error) throw error;
+      showMessage('סיסמה חדשה נשלחה למשתמש באימייל', 'success');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      showMessage('שגיאה באיפוס הסיסמה', 'error');
+    }
+  };
+
+  const toggleUserStatus = async (user: User) => {
+    if (!confirm(`האם ${user.is_active ? 'להשבית' : 'להפעיל'} את המשתמש?`)) return;
 
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({
-          name: settings.name,
-          phone: settings.phone,
-          green_api_instance: settings.green_api_instance || null,
-          green_api_token: settings.green_api_token || null,
-          whatsapp_number: settings.whatsapp_number || null
-        })
-        .eq('id', settings.id);
+        .update({ is_active: !user.is_active })
+        .eq('id', user.id);
 
-      if (error) {
-        console.error('Error saving settings:', error);
-        setMessage('שגיאה בשמירת ההגדרות');
-        setMessageType('error');
-      } else {
-        setMessage('ההגדרות נשמרו בהצלחה!');
-        setMessageType('success');
-        setTimeout(() => setMessage(''), 3000);
-      }
+      if (error) throw error;
+      showMessage(`המשתמש ${!user.is_active ? 'הופעל' : 'הושבת'} בהצלחה`, 'success');
+      loadUsers();
     } catch (error) {
-      console.error('Error:', error);
-      setMessage('שגיאה בשמירת ההגדרות');
-      setMessageType('error');
-    } finally {
-      setSaving(false);
+      console.error('Error toggling user status:', error);
+      showMessage('שגיאה בשינוי סטטוס המשתמש', 'error');
     }
   };
 
-  const testWhatsAppConnection = async () => {
-    if (!settings.green_api_instance || !settings.green_api_token) {
-      setMessage('נא להזין Instance ID ו-Token לפני הבדיקה');
-      setMessageType('error');
-      return;
-    }
-
-    setTestingWhatsApp(true);
-    setMessage('');
+  const deleteUser = async (userId: string) => {
+    if (!confirm('האם אתה בטוח שברצונך למחוק את המשתמש? פעולה זו אינה ניתנת לביטול.')) return;
 
     try {
-      // Test the Green API connection
-      const response = await fetch(
-        `https://api.green-api.com/waInstance${settings.green_api_instance}/getStateInstance/${settings.green_api_token}`,
-        {
-          method: 'GET',
-        }
-      );
+      const { error } = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
 
-      const data = await response.json();
-
-      if (response.ok && data.stateInstance === 'authorized') {
-        setMessage('החיבור ל-WhatsApp פעיל! ✅');
-        setMessageType('success');
-        
-        // Try to send a test message to self
-        if (settings.whatsapp_number) {
-          await sendTestMessage();
-        }
-      } else {
-        setMessage(`החיבור ל-WhatsApp לא פעיל. סטטוס: ${data.stateInstance || 'לא מחובר'}`);
-        setMessageType('error');
-      }
+      if (error) throw error;
+      showMessage('המשתמש נמחק בהצלחה', 'success');
+      loadUsers();
     } catch (error) {
-      console.error('Error testing WhatsApp:', error);
-      setMessage('שגיאה בבדיקת החיבור ל-WhatsApp');
-      setMessageType('error');
-    } finally {
-      setTestingWhatsApp(false);
+      console.error('Error deleting user:', error);
+      showMessage('שגיאה במחיקת המשתמש', 'error');
     }
   };
 
-  const sendTestMessage = async () => {
-    try {
-      let phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
-      if (phoneNumber.startsWith('0')) {
-        phoneNumber = '972' + phoneNumber.substring(1);
-      }
-
-      const response = await fetch(
-        `https://api.green-api.com/waInstance${settings.green_api_instance}/sendMessage/${settings.green_api_token}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            chatId: `${phoneNumber}@c.us`,
-            message: `🔧 *הודעת בדיקה*\n\nהחיבור ל-WhatsApp הוגדר בהצלחה!\n\nשם הסוכן: ${settings.name}\nזמן: ${new Date().toLocaleString('he-IL')}`
-          }),
-        }
-      );
-
-      if (response.ok) {
-        setMessage('החיבור פעיל! הודעת בדיקה נשלחה למספר שלך 📱');
-        setMessageType('success');
-      }
-    } catch (error) {
-      console.error('Error sending test message:', error);
-    }
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      password: '',
+      role: '',
+      permissions: [],
+      send_email: true
+    });
+    setEditingUser(null);
   };
+
+  const openEditModal = (user: User) => {
+    setEditingUser(user);
+    setFormData({
+      name: user.name,
+      email: user.email,
+      phone: user.phone || '',
+      password: '',
+      role: user.role,
+      permissions: user.permissions || [],
+      send_email: false
+    });
+    setShowModal(true);
+  };
+
+  const showMessage = (text: string, type: string) => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage({ text: '', type: '' }), 5000);
+  };
+
+  const filteredUsers = users.filter(user => 
+    user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.role?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loading) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
-        <h2>טוען הגדרות...</h2>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <h2>טוען נתונים...</h2>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ marginBottom: '30px' }}>⚙️ הגדרות חשבון</h1>
+    <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+      <h1 style={{ marginBottom: '30px', fontSize: '2.5em', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        👥 ניהול משתמשים והרשאות
+      </h1>
 
-      {message && (
+      {message.text && (
         <div style={{
           padding: '15px',
-          backgroundColor: messageType === 'error' ? '#ffebee' : '#e8f5e9',
-          color: messageType === 'error' ? '#c62828' : '#2e7d32',
-          borderRadius: '5px',
           marginBottom: '20px',
-          border: `1px solid ${messageType === 'error' ? '#ef5350' : '#66bb6a'}`
+          backgroundColor: message.type === 'error' ? '#ffebee' : '#e8f5e9',
+          color: message.type === 'error' ? '#c62828' : '#2e7d32',
+          borderRadius: '8px',
+          border: `1px solid ${message.type === 'error' ? '#ef5350' : '#66bb6a'}`
         }}>
-          {message}
+          {message.text}
         </div>
       )}
 
-      {/* Personal Information */}
-      <div style={{
-        backgroundColor: '#f5f5f5',
-        padding: '20px',
-        borderRadius: '10px',
-        marginBottom: '20px'
-      }}>
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>👤 פרטים אישיים</h2>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-              שם מלא
-            </label>
-            <input
-              type="text"
-              value={settings.name}
-              onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                fontSize: '16px',
-                borderRadius: '5px',
-                border: '1px solid #ddd',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-              טלפון
-            </label>
-            <input
-              type="tel"
-              value={settings.phone}
-              onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                fontSize: '16px',
-                borderRadius: '5px',
-                border: '1px solid #ddd',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-              אימייל
-            </label>
-            <input
-              type="email"
-              value={settings.email}
-              disabled
-              style={{
-                width: '100%',
-                padding: '10px',
-                fontSize: '16px',
-                borderRadius: '5px',
-                border: '1px solid #ddd',
-                backgroundColor: '#f0f0f0',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-              תפקיד
-            </label>
-            <input
-              type="text"
-              value={settings.role}
-              disabled
-              style={{
-                width: '100%',
-                padding: '10px',
-                fontSize: '16px',
-                borderRadius: '5px',
-                border: '1px solid #ddd',
-                backgroundColor: '#f0f0f0',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+      {/* Stats Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+        <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.length}</div>
+          <div>סה"כ משתמשים</div>
+        </div>
+        <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.filter(u => u.is_active).length}</div>
+          <div>משתמשים פעילים</div>
+        </div>
+        <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.filter(u => u.role === 'sales').length}</div>
+          <div>סוכני מכירות</div>
+        </div>
+        <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.filter(u => u.role === 'admin').length}</div>
+          <div>מנהלים</div>
         </div>
       </div>
 
-      {/* WhatsApp Configuration */}
-      <div style={{
-        backgroundColor: '#e8f5e9',
-        padding: '20px',
-        borderRadius: '10px',
-        marginBottom: '20px',
-        border: '1px solid #4CAF50'
-      }}>
-        <h2 style={{ marginBottom: '20px', color: '#2e7d32' }}>
-          📱 הגדרות WhatsApp (Green API)
-        </h2>
-        
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Instance ID
-          </label>
-          <input
-            type="text"
-            placeholder="לדוגמה: 7103914530"
-            value={settings.green_api_instance}
-            onChange={(e) => setSettings({ ...settings, green_api_instance: e.target.value })}
-            style={{
-              width: '100%',
-              padding: '10px',
-              fontSize: '16px',
-              borderRadius: '5px',
-              border: '1px solid #ddd',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            API Token
-          </label>
-          <div style={{ position: 'relative' }}>
-            <input
-              type={showApiToken ? 'text' : 'password'}
-              placeholder="הכנס את ה-API Token שלך"
-              value={settings.green_api_token}
-              onChange={(e) => setSettings({ ...settings, green_api_token: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                paddingLeft: '50px',
-                fontSize: '16px',
-                borderRadius: '5px',
-                border: '1px solid #ddd',
-                boxSizing: 'border-box'
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowApiToken(!showApiToken)}
-              style={{
-                position: 'absolute',
-                left: '10px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '20px'
-              }}
-            >
-              {showApiToken ? '👁️' : '👁️‍🗨️'}
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            מספר WhatsApp (לבדיקות)
-          </label>
-          <input
-            type="tel"
-            placeholder="050-1234567"
-            value={settings.whatsapp_number}
-            onChange={(e) => setSettings({ ...settings, whatsapp_number: e.target.value })}
-            style={{
-              width: '100%',
-              padding: '10px',
-              fontSize: '16px',
-              borderRadius: '5px',
-              border: '1px solid #ddd',
-              boxSizing: 'border-box'
-            }}
-          />
-        </div>
-
-        <button
-          onClick={testWhatsAppConnection}
-          disabled={testingWhatsApp}
+      {/* Search Box */}
+      <div style={{ marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="🔍 חיפוש לפי שם, אימייל או תפקיד..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
           style={{
-            padding: '10px 20px',
-            backgroundColor: '#25D366',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: testingWhatsApp ? 'not-allowed' : 'pointer',
+            width: '100%',
+            padding: '12px',
             fontSize: '16px',
-            marginTop: '10px'
+            borderRadius: '8px',
+            border: '2px solid #e0e0e0'
           }}
-        >
-          {testingWhatsApp ? 'בודק חיבור...' : '🔌 בדוק חיבור WhatsApp'}
-        </button>
-
-        <div style={{
-          marginTop: '20px',
-          padding: '15px',
-          backgroundColor: '#fff3cd',
-          borderRadius: '5px',
-          border: '1px solid #ffc107'
-        }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>📝 הוראות הגדרה:</h4>
-          <ol style={{ margin: '5px 0', paddingRight: '20px', color: '#856404' }}>
-            <li>הירשם ב-<a href="https://green-api.com" target="_blank" rel="noopener noreferrer">Green API</a></li>
-            <li>צור Instance חדש וסרוק את קוד ה-QR עם WhatsApp</li>
-            <li>העתק את ה-Instance ID וה-API Token</li>
-            <li>הדבק אותם בשדות למעלה ולחץ על "בדוק חיבור"</li>
-          </ol>
-        </div>
+        />
       </div>
 
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            padding: '12px 40px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            fontSize: '18px',
-            fontWeight: 'bold'
-          }}
-        >
-          {saving ? 'שומר...' : '💾 שמור הגדרות'}
-        </button>
-        
-        <button
-          onClick={() => router.push('/dashboard')}
-          style={{
-            padding: '12px 40px',
-            backgroundColor: '#9e9e9e',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '18px'
-          }}
-        >
-          ביטול
-        </button>
+      {/* Users Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
+        {filteredUsers.map(user => (
+          <div key={user.id} style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            opacity: user.is_active ? 1 : 0.7
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+              <div>
+                <h3>{user.name}</h3>
+                <p style={{ color: '#666', fontSize: '0.9em' }}>{user.email}</p>
+              </div>
+              <span style={{
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '0.85em',
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                color: 'white'
+              }}>
+                {roleTemplates[user.role]?.name || user.role}
+              </span>
+            </div>
+            
+            <span style={{
+              padding: '4px 8px',
+              borderRadius: '12px',
+              fontSize: '0.8em',
+              backgroundColor: user.is_active ? '#c8e6c9' : '#ffcdd2',
+              color: user.is_active ? '#2e7d32' : '#c62828'
+            }}>
+              {user.is_active ? 'פעיל' : 'לא פעיל'}
+            </span>
+
+            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+              <h4>הרשאות:</h4>
+              <div style={{ marginTop: '10px' }}>
+                {user.permissions?.slice(0, 3).map(perm => (
+                  <div key={perm} style={{ fontSize: '0.9em', marginBottom: '5px' }}>
+                    ✅ {availablePermissions.find(p => p.id === perm)?.name || perm}
+                  </div>
+                ))}
+                {user.permissions?.length > 3 && (
+                  <div style={{ fontSize: '0.9em', color: '#666' }}>
+                    ועוד {user.permissions.length - 3} הרשאות...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+              <button
+                onClick={() => openEditModal(user)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✏️ עריכה
+              </button>
+              <button
+                onClick={() => handleResetPassword(user.id)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#9e9e9e',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔐 איפוס סיסמה
+              </button>
+              <button
+                onClick={() => toggleUserStatus(user)}
+                style={{
+                  padding: '8px 16px',
+                  background: user.is_active ? '#ef5350' : '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                {user.is_active ? '🚫 השבתה' : '✅ הפעלה'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
-  );
-}
+
+      {/* Add User Button */}
+      <button
+        onClick={() => {
+          resetForm();
+          setShowModal(true);
+        }}
+        style={{
+          position: 'fixed',
+          bottom: '30px',
+          left: '30px',
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #667eea, #764ba2)',
+          color: 'white',
+          border: 'none',
+          fontSize: '24px',
+          cursor: 'pointer',
+          boxShadow: '0 5px 20px rgba(102, 126, 234, 0.4)'
+        }}
+      >
+        ➕
+      </button>
+
+      {/* Modal */}
+      {showModal && (

@@ -34,9 +34,7 @@ export default function UsersManagementPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('users');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [message, setMessage] = useState({ text: '', type: '' });
@@ -123,7 +121,7 @@ export default function UsersManagementPage() {
 
       if (!profile?.permissions?.includes('manage_users')) {
         showMessage('אין לך הרשאות לצפות בדף זה', 'error');
-        router.push('/dashboard');
+        setTimeout(() => router.push('/dashboard'), 2000);
         return;
       }
 
@@ -196,21 +194,9 @@ export default function UsersManagementPage() {
         if (error) throw error;
         showMessage('המשתמש עודכן בהצלחה', 'success');
       } else {
-        // Create new user via Edge Function
-        const { data, error } = await supabase.functions.invoke('create-user', {
-          body: {
-            email: formData.email,
-            password: formData.password,
-            name: formData.name,
-            phone: formData.phone,
-            role: formData.role,
-            permissions: formData.permissions,
-            send_email: formData.send_email
-          }
-        });
-
-        if (error) throw error;
-        showMessage('המשתמש נוסף בהצלחה! פרטי הגישה נשלחו באימייל', 'success');
+        // For new users, you'll need to create a Supabase Edge Function
+        // For now, we'll just update the profile
+        showMessage('ליצירת משתמש חדש יש צורך ב-Edge Function', 'info');
       }
 
       setShowModal(false);
@@ -219,22 +205,6 @@ export default function UsersManagementPage() {
     } catch (error) {
       console.error('Error saving user:', error);
       showMessage('שגיאה בשמירת המשתמש', 'error');
-    }
-  };
-
-  const handleResetPassword = async (userId: string) => {
-    if (!confirm('האם לאפס את הסיסמה ולשלוח סיסמה חדשה למשתמש?')) return;
-
-    try {
-      const { data, error } = await supabase.functions.invoke('reset-user-password', {
-        body: { userId }
-      });
-
-      if (error) throw error;
-      showMessage('סיסמה חדשה נשלחה למשתמש באימייל', 'success');
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      showMessage('שגיאה באיפוס הסיסמה', 'error');
     }
   };
 
@@ -253,23 +223,6 @@ export default function UsersManagementPage() {
     } catch (error) {
       console.error('Error toggling user status:', error);
       showMessage('שגיאה בשינוי סטטוס המשתמש', 'error');
-    }
-  };
-
-  const deleteUser = async (userId: string) => {
-    if (!confirm('האם אתה בטוח שברצונך למחוק את המשתמש? פעולה זו אינה ניתנת לביטול.')) return;
-
-    try {
-      const { error } = await supabase.functions.invoke('delete-user', {
-        body: { userId }
-      });
-
-      if (error) throw error;
-      showMessage('המשתמש נמחק בהצלחה', 'success');
-      loadUsers();
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      showMessage('שגיאה במחיקת המשתמש', 'error');
     }
   };
 
@@ -349,7 +302,7 @@ export default function UsersManagementPage() {
           <div>משתמשים פעילים</div>
         </div>
         <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
-          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.filter(u => u.role === 'sales').length}</div>
+          <div style={{ fontSize: '2em', fontWeight: 'bold' }}>{users.filter(u => u.role?.includes('sales')).length}</div>
           <div>סוכני מכירות</div>
         </div>
         <div style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
@@ -387,7 +340,7 @@ export default function UsersManagementPage() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
               <div>
-                <h3>{user.name}</h3>
+                <h3>{user.name || 'ללא שם'}</h3>
                 <p style={{ color: '#666', fontSize: '0.9em' }}>{user.email}</p>
               </div>
               <span style={{
@@ -397,7 +350,7 @@ export default function UsersManagementPage() {
                 background: 'linear-gradient(135deg, #667eea, #764ba2)',
                 color: 'white'
               }}>
-                {roleTemplates[user.role]?.name || user.role}
+                {roleTemplates[user.role]?.name || user.role || 'משתמש'}
               </span>
             </div>
             
@@ -411,21 +364,23 @@ export default function UsersManagementPage() {
               {user.is_active ? 'פעיל' : 'לא פעיל'}
             </span>
 
-            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
-              <h4>הרשאות:</h4>
-              <div style={{ marginTop: '10px' }}>
-                {user.permissions?.slice(0, 3).map(perm => (
-                  <div key={perm} style={{ fontSize: '0.9em', marginBottom: '5px' }}>
-                    ✅ {availablePermissions.find(p => p.id === perm)?.name || perm}
-                  </div>
-                ))}
-                {user.permissions?.length > 3 && (
-                  <div style={{ fontSize: '0.9em', color: '#666' }}>
-                    ועוד {user.permissions.length - 3} הרשאות...
-                  </div>
-                )}
+            {user.permissions && user.permissions.length > 0 && (
+              <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                <h4>הרשאות:</h4>
+                <div style={{ marginTop: '10px' }}>
+                  {user.permissions.slice(0, 3).map(perm => (
+                    <div key={perm} style={{ fontSize: '0.9em', marginBottom: '5px' }}>
+                      ✅ {availablePermissions.find(p => p.id === perm)?.name || perm}
+                    </div>
+                  ))}
+                  {user.permissions.length > 3 && (
+                    <div style={{ fontSize: '0.9em', color: '#666' }}>
+                      ועוד {user.permissions.length - 3} הרשאות...
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
               <button
@@ -440,19 +395,6 @@ export default function UsersManagementPage() {
                 }}
               >
                 ✏️ עריכה
-              </button>
-              <button
-                onClick={() => handleResetPassword(user.id)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#9e9e9e',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                🔐 איפוס סיסמה
               </button>
               <button
                 onClick={() => toggleUserStatus(user)}
@@ -498,3 +440,150 @@ export default function UsersManagementPage() {
 
       {/* Modal */}
       {showModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2>{editingUser ? 'עריכת משתמש' : 'הוספת משתמש חדש'}</h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✖
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  שם מלא *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e0e0e0',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  אימייל *
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                  disabled={!!editingUser}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e0e0e0',
+                    fontSize: '16px',
+                    backgroundColor: editingUser ? '#f5f5f5' : 'white'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  טלפון
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e0e0e0',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+
+              {!editingUser && (
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    סיסמה זמנית *
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                    placeholder="סיסמה תישלח למשתמש באימייל"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '2px solid #e0e0e0',
+                      fontSize: '16px'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 16px',
+                      background: '#9e9e9e',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔑 צור סיסמה אוטומטית
+                  </button>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  בחר תפקיד
+                </label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e0e0e0',

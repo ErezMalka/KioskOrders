@@ -22,6 +22,7 @@ const supabase = getSupabase();
 // Types
 interface Customer {
   id: string;
+  org_id: string;
   name: string;
   email: string;
   phone: string;
@@ -39,6 +40,7 @@ export default function CustomersPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [userOrgId, setUserOrgId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -48,23 +50,41 @@ export default function CustomersPage() {
 
   useEffect(() => {
     checkAuth();
-    loadCustomers();
   }, []);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       router.push('/login');
+      return;
     }
+    
+    // Get user's org_id from the users table
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('id', session.user.id)
+      .single();
+    
+    if (userError || !userData?.org_id) {
+      console.error('Error getting user org_id:', userError);
+      setError('שגיאה בטעינת נתוני המשתמש');
+      setLoading(false);
+      return;
+    }
+    
+    setUserOrgId(userData.org_id);
+    loadCustomers(userData.org_id);
   };
 
-  const loadCustomers = async () => {
+  const loadCustomers = async (orgId: string) => {
     setLoading(true);
     setError(null);
     try {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -91,10 +111,16 @@ export default function CustomersPage() {
       return;
     }
 
+    if (!userOrgId) {
+      setError('שגיאה: לא נמצא מזהה ארגון');
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('customers')
         .insert([{
+          org_id: userOrgId,
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
@@ -111,7 +137,7 @@ export default function CustomersPage() {
       console.log('Customer added successfully:', data);
       setShowAddModal(false);
       resetForm();
-      await loadCustomers();
+      await loadCustomers(userOrgId);
       alert('הלקוח נוסף בהצלחה!');
     } catch (error: any) {
       console.error('Error adding customer:', error);
@@ -161,7 +187,7 @@ export default function CustomersPage() {
       console.log('Customer updated successfully:', data);
       setShowEditModal(false);
       resetForm();
-      await loadCustomers();
+      await loadCustomers(userOrgId!);
       alert('הלקוח עודכן בהצלחה!');
     } catch (error: any) {
       console.error('Error updating customer:', error);
@@ -185,7 +211,7 @@ export default function CustomersPage() {
         return;
       }
       
-      await loadCustomers();
+      await loadCustomers(userOrgId!);
       alert('הלקוח נמחק בהצלחה!');
     } catch (error: any) {
       console.error('Error deleting customer:', error);

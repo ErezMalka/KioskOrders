@@ -4,11 +4,20 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Create a singleton instance of Supabase client
+let supabaseInstance: any = null;
+
+function getSupabase() {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return supabaseInstance;
+}
+
+const supabase = getSupabase();
 
 // Types
 interface Customer {
@@ -19,7 +28,7 @@ interface Customer {
   address?: string;
   city?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export default function CustomersPage() {
@@ -30,6 +39,7 @@ export default function CustomersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -52,72 +62,138 @@ export default function CustomersPage() {
 
   const loadCustomers = async () => {
     setLoading(true);
+    setError(null);
     try {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading customers:', error);
+        setError(`שגיאה בטעינת לקוחות: ${error.message}`);
+        return;
+      }
+      
       setCustomers(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading customers:', error);
+      setError(`שגיאה בטעינת לקוחות: ${error?.message || 'שגיאה לא ידועה'}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddCustomer = async () => {
+    setError(null);
+    
+    // Validation
+    if (!formData.name || !formData.email || !formData.phone) {
+      setError('יש למלא את כל השדות החובה (שם, אימייל, טלפון)');
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('customers')
-        .insert([formData]);
+        .insert([{
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address || null,
+          city: formData.city || null
+        }])
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error adding customer:', error);
+        setError(`שגיאה בהוספת לקוח: ${error.message}`);
+        return;
+      }
 
+      console.log('Customer added successfully:', data);
       setShowAddModal(false);
       resetForm();
-      loadCustomers();
-    } catch (error) {
+      await loadCustomers();
+      alert('הלקוח נוסף בהצלחה!');
+    } catch (error: any) {
       console.error('Error adding customer:', error);
-      alert('שגיאה בהוספת לקוח');
+      setError(`שגיאה בהוספת לקוח: ${error?.message || 'שגיאה לא ידועה'}`);
     }
   };
 
   const handleEditCustomer = async () => {
     if (!selectedCustomer) return;
+    
+    setError(null);
+    
+    // Validation
+    if (!formData.name || !formData.email || !formData.phone) {
+      setError('יש למלא את כל השדות החובה (שם, אימייל, טלפון)');
+      return;
+    }
 
     try {
-      const { error } = await supabase
+      const updateData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address || null,
+        city: formData.city || null
+      };
+
+      console.log('Updating customer:', selectedCustomer.id, updateData);
+
+      const { data, error } = await supabase
         .from('customers')
-        .update(formData)
-        .eq('id', selectedCustomer.id);
+        .update(updateData)
+        .eq('id', selectedCustomer.id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating customer:', error);
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        setError(`שגיאה בעדכון לקוח: ${error.message}`);
+        return;
+      }
 
+      console.log('Customer updated successfully:', data);
       setShowEditModal(false);
       resetForm();
-      loadCustomers();
-    } catch (error) {
+      await loadCustomers();
+      alert('הלקוח עודכן בהצלחה!');
+    } catch (error: any) {
       console.error('Error updating customer:', error);
-      alert('שגיאה בעדכון לקוח');
+      setError(`שגיאה בעדכון לקוח: ${error?.message || 'שגיאה לא ידועה'}`);
     }
   };
 
   const handleDeleteCustomer = async (id: string) => {
     if (!confirm('האם אתה בטוח שברצונך למחוק את הלקוח?')) return;
 
+    setError(null);
     try {
       const { error } = await supabase
         .from('customers')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
-      loadCustomers();
-    } catch (error) {
+      if (error) {
+        console.error('Error deleting customer:', error);
+        setError(`שגיאה במחיקת לקוח: ${error.message}`);
+        return;
+      }
+      
+      await loadCustomers();
+      alert('הלקוח נמחק בהצלחה!');
+    } catch (error: any) {
       console.error('Error deleting customer:', error);
-      alert('שגיאה במחיקת לקוח');
+      setError(`שגיאה במחיקת לקוח: ${error?.message || 'שגיאה לא ידועה'}`);
     }
   };
 
@@ -130,6 +206,7 @@ export default function CustomersPage() {
       city: ''
     });
     setSelectedCustomer(null);
+    setError(null);
   };
 
   const openEditModal = (customer: Customer) => {
@@ -141,6 +218,7 @@ export default function CustomersPage() {
       address: customer.address || '',
       city: customer.city || ''
     });
+    setError(null);
     setShowEditModal(true);
   };
 
@@ -156,9 +234,29 @@ export default function CustomersPage() {
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center', 
-        minHeight: '100vh' 
+        minHeight: '100vh',
+        backgroundColor: '#f5f5f5'
       }}>
-        <div>טוען...</div>
+        <div style={{
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '50px',
+            height: '50px',
+            margin: '0 auto 20px',
+            border: '4px solid #e0e0e0',
+            borderTop: '4px solid #007bff',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          <div style={{ fontSize: '18px', color: '#666' }}>טוען לקוחות...</div>
+        </div>
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -200,6 +298,21 @@ export default function CustomersPage() {
         </div>
       </header>
 
+      {/* Error Message */}
+      {error && (
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto 20px',
+          padding: '15px 20px',
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          borderRadius: '5px',
+          border: '1px solid #f5c6cb'
+        }}>
+          {error}
+        </div>
+      )}
+
       {/* Main Content */}
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
         {/* Search and Add */}
@@ -221,7 +334,8 @@ export default function CustomersPage() {
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '5px',
-              width: '300px'
+              width: '300px',
+              fontSize: '16px'
             }}
           />
           <button
@@ -232,48 +346,109 @@ export default function CustomersPage() {
               color: 'white',
               border: 'none',
               borderRadius: '5px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold'
             }}
           >
             + הוסף לקוח חדש
           </button>
         </div>
 
+        {/* Stats */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '20px',
+          marginBottom: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#007bff' }}>
+              {customers.length}
+            </div>
+            <div style={{ color: '#666', marginTop: '5px' }}>סה"כ לקוחות</div>
+          </div>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#28a745' }}>
+              {customers.filter(c => {
+                const created = new Date(c.created_at);
+                const now = new Date();
+                const diffDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 3600 * 24));
+                return diffDays <= 30;
+              }).length}
+            </div>
+            <div style={{ color: '#666', marginTop: '5px' }}>לקוחות חדשים החודש</div>
+          </div>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#ffc107' }}>
+              {filteredCustomers.length}
+            </div>
+            <div style={{ color: '#666', marginTop: '5px' }}>תוצאות חיפוש</div>
+          </div>
+        </div>
+
         {/* Customers Table */}
         <div style={{ 
           backgroundColor: 'white',
           borderRadius: '8px',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8f9fa' }}>
-                <th style={{ padding: '15px', textAlign: 'right' }}>שם</th>
-                <th style={{ padding: '15px', textAlign: 'right' }}>אימייל</th>
-                <th style={{ padding: '15px', textAlign: 'right' }}>טלפון</th>
-                <th style={{ padding: '15px', textAlign: 'right' }}>עיר</th>
-                <th style={{ padding: '15px', textAlign: 'right' }}>פעולות</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>שם</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>אימייל</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>טלפון</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>עיר</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>תאריך הוספה</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>פעולות</th>
               </tr>
             </thead>
             <tbody>
               {filteredCustomers.map((customer) => (
                 <React.Fragment key={customer.id}>
-                  <tr style={{ borderBottom: '1px solid #e0e0e0' }}>
-                    <td style={{ padding: '15px' }}>{customer.name}</td>
+                  <tr style={{ 
+                    borderBottom: '1px solid #e0e0e0',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <td style={{ padding: '15px', fontWeight: '500' }}>{customer.name}</td>
                     <td style={{ padding: '15px' }}>{customer.email}</td>
-                    <td style={{ padding: '15px' }}>{customer.phone}</td>
+                    <td style={{ padding: '15px', direction: 'ltr', textAlign: 'right' }}>{customer.phone}</td>
                     <td style={{ padding: '15px' }}>{customer.city || '-'}</td>
+                    <td style={{ padding: '15px', color: '#666' }}>
+                      {new Date(customer.created_at).toLocaleDateString('he-IL')}
+                    </td>
                     <td style={{ padding: '15px' }}>
                       <button
                         onClick={() => openEditModal(customer)}
                         style={{
-                          padding: '5px 10px',
+                          padding: '5px 15px',
                           marginLeft: '10px',
                           backgroundColor: '#007bff',
                           color: 'white',
                           border: 'none',
                           borderRadius: '3px',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          fontSize: '14px'
                         }}
                       >
                         עריכה
@@ -281,12 +456,13 @@ export default function CustomersPage() {
                       <button
                         onClick={() => handleDeleteCustomer(customer.id)}
                         style={{
-                          padding: '5px 10px',
+                          padding: '5px 15px',
                           backgroundColor: '#dc3545',
                           color: 'white',
                           border: 'none',
                           borderRadius: '3px',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          fontSize: '14px'
                         }}
                       >
                         מחיקה
@@ -300,18 +476,37 @@ export default function CustomersPage() {
 
           {filteredCustomers.length === 0 && (
             <div style={{ 
-              padding: '40px', 
+              padding: '60px 40px', 
               textAlign: 'center',
               color: '#666'
             }}>
-              אין לקוחות להצגה
+              <div style={{ fontSize: '48px', marginBottom: '20px' }}>📋</div>
+              <div style={{ fontSize: '18px' }}>
+                {searchTerm ? 'לא נמצאו לקוחות התואמים לחיפוש' : 'אין לקוחות להצגה'}
+              </div>
+              {!searchTerm && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  style={{
+                    marginTop: '20px',
+                    padding: '10px 20px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  הוסף את הלקוח הראשון
+                </button>
+              )}
             </div>
           )}
         </div>
       </main>
 
-      {/* Add Modal */}
-      {showAddModal && (
+      {/* Add/Edit Modal */}
+      {(showAddModal || showEditModal) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -329,244 +524,156 @@ export default function CustomersPage() {
             padding: '30px',
             borderRadius: '10px',
             width: '500px',
-            maxWidth: '90%'
+            maxWidth: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto'
           }}>
-            <h2 style={{ marginBottom: '20px' }}>הוסף לקוח חדש</h2>
+            <h2 style={{ marginBottom: '20px' }}>
+              {showAddModal ? 'הוסף לקוח חדש' : 'ערוך לקוח'}
+            </h2>
+            
+            {error && (
+              <div style={{
+                padding: '10px',
+                marginBottom: '20px',
+                backgroundColor: '#f8d7da',
+                color: '#721c24',
+                borderRadius: '5px',
+                border: '1px solid #f5c6cb'
+              }}>
+                {error}
+              </div>
+            )}
             
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>שם</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                שם *
+              </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '10px',
                   border: '1px solid #ddd',
-                  borderRadius: '5px'
+                  borderRadius: '5px',
+                  fontSize: '16px'
                 }}
+                placeholder="הכנס שם לקוח"
               />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>אימייל</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                אימייל *
+              </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({...formData, email: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '10px',
                   border: '1px solid #ddd',
-                  borderRadius: '5px'
+                  borderRadius: '5px',
+                  fontSize: '16px'
                 }}
+                placeholder="example@email.com"
               />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>טלפון</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                טלפון *
+              </label>
               <input
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '10px',
                   border: '1px solid #ddd',
-                  borderRadius: '5px'
+                  borderRadius: '5px',
+                  fontSize: '16px'
                 }}
+                placeholder="050-1234567"
               />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>כתובת</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                כתובת
+              </label>
               <input
                 type="text"
                 value={formData.address}
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '10px',
                   border: '1px solid #ddd',
-                  borderRadius: '5px'
+                  borderRadius: '5px',
+                  fontSize: '16px'
                 }}
+                placeholder="רחוב ומספר"
               />
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>עיר</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                עיר
+              </label>
               <input
                 type="text"
                 value={formData.city}
                 onChange={(e) => setFormData({...formData, city: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '8px',
+                  padding: '10px',
                   border: '1px solid #ddd',
-                  borderRadius: '5px'
+                  borderRadius: '5px',
+                  fontSize: '16px'
                 }}
+                placeholder="עיר"
               />
+            </div>
+
+            <div style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
+              * שדות חובה
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <button
-                onClick={handleAddCustomer}
+                onClick={showAddModal ? handleAddCustomer : handleEditCustomer}
                 style={{
-                  padding: '10px 30px',
-                  backgroundColor: '#28a745',
+                  padding: '12px 30px',
+                  backgroundColor: showAddModal ? '#28a745' : '#007bff',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
                 }}
               >
-                הוסף
+                {showAddModal ? 'הוסף' : 'עדכן'}
               </button>
               <button
                 onClick={() => {
-                  setShowAddModal(false);
+                  if (showAddModal) setShowAddModal(false);
+                  if (showEditModal) setShowEditModal(false);
                   resetForm();
                 }}
                 style={{
-                  padding: '10px 30px',
+                  padding: '12px 30px',
                   backgroundColor: '#6c757d',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                ביטול
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {showEditModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '10px',
-            width: '500px',
-            maxWidth: '90%'
-          }}>
-            <h2 style={{ marginBottom: '20px' }}>ערוך לקוח</h2>
-            
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>שם</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>אימייל</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>טלפון</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>כתובת</label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>עיר</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => setFormData({...formData, city: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <button
-                onClick={handleEditCustomer}
-                style={{
-                  padding: '10px 30px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                עדכן
-              </button>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  resetForm();
-                }}
-                style={{
-                  padding: '10px 30px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: '16px'
                 }}
               >
                 ביטול

@@ -1,490 +1,343 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
+// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    db: {
-      schema: 'sales' // הגדרת סכמת ברירת מחדל
-    }
-  }
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-interface Lead {
+// Define proper types for OrderLink
+interface OrderLink {
   id: string;
+  order_id: string;
+  link_type: 'deal' | 'quote' | 'order';
+  link_id: string;
   created_at: string;
-  source: string;
-  business_name: string;
-  contact_name?: string;
-  phone?: string;
-  email?: string;
-  city: string;
-  sector: string;
-  owner_id: string;
-  score: number;
-  first_touch_at: string;
-  is_returning: boolean;
-}
-
-interface Quote {
-  id: string;
-  lead_id: string;
-  sent_at: string;
-  amount_before_vat: number;
-  status: 'draft' | 'sent' | 'opened' | 'won' | 'lost';
-  reason_lost?: string;
-  opened_at?: string;
-  decided_at?: string;
+  // Add the deal property with optional chaining support
+  deal?: {
+    id?: string;
+    lead?: {
+      id?: string;
+      business_name?: string;
+      contact_name?: string;
+      phone?: string;
+      email?: string;
+    };
+    amount_before_vat?: number;
+    vat_amount?: number;
+    total_amount?: number;
+    status?: string;
+    created_at?: string;
+  };
+  quote?: {
+    id?: string;
+    quote_number?: string;
+    total_amount?: number;
+    status?: string;
+  };
+  order?: {
+    id?: string;
+    order_number?: string;
+    total_amount?: number;
+    status?: string;
+  };
 }
 
 interface Deal {
   id: string;
   lead_id: string;
-  lead?: Lead;
-  closed_at?: string;
-  amount_before_vat: number;
-  commission_rate: number;
-  probability: number;
   stage: string;
-  expected_close_date: string;
+  amount_before_vat: number;
+  vat_amount: number;
+  total_amount: number;
+  probability: number;
+  expected_close_date: string | null;
+  notes: string | null;
   created_at: string;
-  quote_id?: string;
+  updated_at: string;
+  lead?: {
+    id: string;
+    business_name: string;
+    contact_name: string;
+    phone: string;
+    email: string;
+    address?: string;
+    city?: string;
+    notes?: string;
+    source?: string;
+    status: string;
+    created_at: string;
+  };
 }
 
-interface Activity {
+interface Lead {
   id: string;
-  lead_id: string;
-  type: 'visit' | 'call' | 'whatsapp' | 'email' | 'meeting' | 'demo' | 'follow_up';
-  at: string;
-  duration_min?: number;
-  notes?: string;
-  status: 'completed' | 'pending' | 'cancelled' | 'rescheduled';
-  business_name?: string;
+  business_name: string;
+  contact_name: string;
+  phone: string;
+  email: string;
+  address?: string;
   city?: string;
-}
-
-interface OrderLink {
-  id: string;
-  deal_id: string;
-  order_id: string;
+  notes?: string;
+  source?: string;
+  status: string;
   created_at: string;
-  order?: any;
 }
 
-export default function SalesAgentDashboard() {
+export default function SalesDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [includeVat, setIncludeVat] = useState(false);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [showCreateOrder, setShowCreateOrder] = useState(false);
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-  
-  // KPI States
-  const [kpiData, setKpiData] = useState({
-    leads: { new: 0, returning: 0, total: 0 },
-    meetings: 0,
-    quotes: { sent: 0, won: 0, winRate: 0 },
-    sales: { amount: 0, avgDealSize: 0, target: 150000, attainment: 0 },
-    salesCycle: 0,
-    commission: { approved: 0, expected: 0, deductions: 0 },
-    orders: { total: 0, pending: 0, completed: 0 },
-    pipeline: { 
-      value: 0, 
-      weighted: 0,
-      stages: [
-        { name: 'לידים', count: 0, value: 0, color: '#3B82F6' },
-        { name: 'פגישות', count: 0, value: 0, color: '#10B981' },
-        { name: 'הצעות', count: 0, value: 0, color: '#F59E0B' },
-        { name: 'סגירות', count: 0, value: 0, color: '#8B5CF6' }
-      ]
-    }
+  const [stats, setStats] = useState({
+    totalDeals: 0,
+    totalValue: 0,
+    wonDeals: 0,
+    lostDeals: 0,
+    pendingDeals: 0,
+    conversionRate: 0,
+    avgDealSize: 0,
+    totalLeads: 0,
+    newLeads: 0,
+    qualifiedLeads: 0,
   });
-
-  const [nextActions, setNextActions] = useState<any[]>([]);
-  const [todayVisits, setTodayVisits] = useState<Activity[]>([]);
-  const [pipelineDeals, setPipelineDeals] = useState<Deal[]>([]);
-  const [linkedOrders, setLinkedOrders] = useState<OrderLink[]>([]);
+  const [recentDeals, setRecentDeals] = useState<Deal[]>([]);
+  const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
+  const [orderLinks, setOrderLinks] = useState<OrderLink[]>([]);
+  const [pipelineData, setPipelineData] = useState<any[]>([]);
+  const [selectedView, setSelectedView] = useState<'overview' | 'pipeline' | 'leads' | 'reports'>('overview');
 
   useEffect(() => {
     checkUser();
+    loadDashboardData();
   }, []);
-
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
-    }
-  }, [user, selectedPeriod]);
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.log('No user found, redirecting to login');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         router.push('/login');
         return;
       }
-
-      // בדוק או צור פרופיל בסכמת sales
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError && profileError.code === 'PGRST116') {
-        // אם אין פרופיל, צור אחד
-        await supabase
-          .from('user_profiles')
-          .insert({
-            id: user.id,
-            full_name: user.email?.split('@')[0],
-            role: 'agent'
-          });
-      }
-
-      setUser(user);
-      console.log('User loaded:', user.email);
+      setUser(session.user);
     } catch (error) {
       console.error('Error checking user:', error);
       router.push('/login');
+    }
+  };
+
+  const loadDashboardData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        loadStats(),
+        loadRecentDeals(),
+        loadRecentLeads(),
+        loadOrderLinks(),
+        loadPipelineData()
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getPeriodDates = () => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    let startDate = today;
-    let endDate = new Date(today);
-    endDate.setDate(endDate.getDate() + 1);
+  const loadStats = async () => {
+    try {
+      // Load deals stats
+      const { data: deals, error: dealsError } = await supabase
+        .from('deals')
+        .select('*');
 
-    switch (selectedPeriod) {
-      case 'today':
-        startDate = today;
-        break;
-      case 'week':
-        startDate = new Date(today);
-        startDate.setDate(today.getDate() - today.getDay());
-        break;
-      case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarter':
-        const quarter = Math.floor(now.getMonth() / 3);
-        startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        break;
+      if (dealsError) throw dealsError;
+
+      if (deals) {
+        const wonDeals = deals.filter(d => d.stage === 'won');
+        const lostDeals = deals.filter(d => d.stage === 'lost');
+        const pendingDeals = deals.filter(d => !['won', 'lost'].includes(d.stage));
+
+        const totalValue = deals.reduce((sum, d) => sum + (d.total_amount || 0), 0);
+        const avgDealSize = deals.length > 0 ? totalValue / deals.length : 0;
+        const conversionRate = deals.length > 0 
+          ? (wonDeals.length / deals.length) * 100 
+          : 0;
+
+        // Load leads stats
+        const { data: leads } = await supabase
+          .from('leads')
+          .select('*');
+
+        const today = new Date();
+        const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        
+        const newLeads = leads?.filter(l => 
+          new Date(l.created_at) > lastWeek
+        ).length || 0;
+
+        const qualifiedLeads = leads?.filter(l => 
+          l.status === 'qualified'
+        ).length || 0;
+
+        setStats({
+          totalDeals: deals.length,
+          totalValue,
+          wonDeals: wonDeals.length,
+          lostDeals: lostDeals.length,
+          pendingDeals: pendingDeals.length,
+          conversionRate,
+          avgDealSize,
+          totalLeads: leads?.length || 0,
+          newLeads,
+          qualifiedLeads
+        });
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
     }
-
-    return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
   };
 
-  const loadDashboardData = async () => {
-    setDataLoading(true);
+  const loadRecentDeals = async () => {
     try {
-      const { startDate, endDate } = getPeriodDates();
-      
-      // Load Leads - מהסכמה sales
-      const { data: leads, error: leadsError } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('owner_id', user.id)
-        .gte('created_at', startDate)
-        .lt('created_at', endDate);
-
-      if (leadsError) console.error('Error loading leads:', leadsError);
-
-      const newLeads = leads?.filter(l => !l.is_returning).length || 0;
-      const returningLeads = leads?.filter(l => l.is_returning).length || 0;
-
-      // Load Quotes - מהסכמה sales
-      const { data: quotes, error: quotesError } = await supabase
-        .from('quotes')
-        .select('*')
-        .eq('owner_id', user.id)
-        .gte('sent_at', startDate)
-        .lt('sent_at', endDate);
-
-      if (quotesError) console.error('Error loading quotes:', quotesError);
-
-      const wonQuotes = quotes?.filter(q => q.status === 'won').length || 0;
-      const sentQuotes = quotes?.length || 0;
-      const winRate = sentQuotes > 0 ? Math.round((wonQuotes / sentQuotes) * 100) : 0;
-
-      // Load Deals - מהסכמה sales
-      const { data: deals, error: dealsError } = await supabase
+      const { data, error } = await supabase
         .from('deals')
         .select(`
           *,
-          lead:leads(business_name, city, sector, contact_name, phone)
+          lead:leads(*)
         `)
-        .eq('owner_id', user.id);
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (dealsError) console.error('Error loading deals:', dealsError);
-
-      const closedDeals = deals?.filter(d => 
-        d.closed_at && 
-        new Date(d.closed_at) >= new Date(startDate) && 
-        new Date(d.closed_at) < new Date(endDate)
-      ) || [];
-
-      const totalSales = closedDeals.reduce((sum, d) => sum + d.amount_before_vat, 0);
-      const avgDealSize = closedDeals.length > 0 ? totalSales / closedDeals.length : 0;
-
-      // Load Activities - מהסכמה sales
-      const { data: activities, error: activitiesError } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('owner_id', user.id)
-        .eq('type', 'meeting')
-        .gte('at', startDate)
-        .lt('at', endDate);
-
-      if (activitiesError) console.error('Error loading activities:', activitiesError);
-
-      const meetings = activities?.length || 0;
-
-      // Load Today's Visits
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      const { data: todayActivities, error: todayError } = await supabase
-        .from('activities')
-        .select(`
-          *,
-          lead:leads(business_name, city)
-        `)
-        .eq('owner_id', user.id)
-        .in('type', ['visit', 'meeting'])
-        .gte('at', today.toISOString())
-        .lt('at', tomorrow.toISOString())
-        .order('at', { ascending: true });
-
-      if (todayError) console.error('Error loading today activities:', todayError);
-
-      // Load Orders linked to deals - משתמש ב-View או בטבלת הקישור
-      const { data: orderLinks, error: orderLinksError } = await supabase
-        .from('sales_orders_link')
-        .select(`
-          *,
-          deal:deals(
-            amount_before_vat,
-            lead:leads(business_name)
-          )
-        `)
-        .eq('agent_id', user.id);
-
-      if (orderLinksError) console.error('Error loading order links:', orderLinksError);
-
-      // אם יש גישה לטבלת ההזמנות המקורית
-      let ordersData = { total: 0, pending: 0, completed: 0 };
-      if (orderLinks && orderLinks.length > 0) {
-        const orderIds = orderLinks.map(ol => ol.order_id);
-        
-        // נסה לטעון מידע מטבלת ההזמנות בסכמה public
-        const { data: orders, error: ordersError } = await supabase
-          .from('orders')
-          .select('id, status')
-          .in('id', orderIds);
-
-        if (!ordersError && orders) {
-          ordersData.total = orders.length;
-          ordersData.pending = orders.filter(o => o.status === 'pending').length;
-          ordersData.completed = orders.filter(o => o.status === 'completed').length;
-        }
-      }
-
-      // Calculate Pipeline
-      const openDeals = deals?.filter(d => !d.closed_at && d.stage !== 'lost') || [];
-      const pipelineValue = openDeals.reduce((sum, d) => sum + d.amount_before_vat, 0);
-      const weightedPipeline = openDeals.reduce((sum, d) => 
-        sum + (d.amount_before_vat * d.probability / 100), 0
-      );
-
-      // Calculate Sales Cycle
-      const completedWithCycle = closedDeals.filter(d => d.created_at && d.closed_at);
-      const avgSalesCycle = completedWithCycle.length > 0 
-        ? completedWithCycle.reduce((sum, d) => {
-            const created = new Date(d.created_at);
-            const closed = new Date(d.closed_at!);
-            const days = Math.floor((closed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-            return sum + days;
-          }, 0) / completedWithCycle.length
-        : 0;
-
-      // Calculate stages
-      const stages = [
-        { 
-          name: 'לידים', 
-          count: leads?.length || 0, 
-          value: 0, 
-          color: '#3B82F6' 
-        },
-        { 
-          name: 'פגישות', 
-          count: openDeals.filter(d => d.stage === 'meeting').length, 
-          value: openDeals.filter(d => d.stage === 'meeting')
-            .reduce((sum, d) => sum + d.amount_before_vat, 0), 
-          color: '#10B981' 
-        },
-        { 
-          name: 'הצעות', 
-          count: openDeals.filter(d => d.stage === 'quote').length, 
-          value: openDeals.filter(d => d.stage === 'quote')
-            .reduce((sum, d) => sum + d.amount_before_vat, 0), 
-          color: '#F59E0B' 
-        },
-        { 
-          name: 'סגירות', 
-          count: closedDeals.length, 
-          value: totalSales, 
-          color: '#8B5CF6' 
-        }
-      ];
-
-      // Load Sales Target
-      const { data: targets } = await supabase
-        .from('sales_targets')
-        .select('*')
-        .eq('owner_id', user.id)
-        .eq('period_type', 'month')
-        .eq('is_active', true)
-        .single();
-
-      const targetAmount = targets?.target_amount || 150000;
-      const attainment = (totalSales / targetAmount) * 100;
-
-      // Set KPI Data
-      setKpiData({
-        leads: { 
-          new: newLeads, 
-          returning: returningLeads, 
-          total: leads?.length || 0 
-        },
-        meetings,
-        quotes: { 
-          sent: sentQuotes, 
-          won: wonQuotes, 
-          winRate 
-        },
-        sales: { 
-          amount: totalSales, 
-          avgDealSize, 
-          target: targetAmount, 
-          attainment 
-        },
-        salesCycle: Math.round(avgSalesCycle),
-        commission: { 
-          approved: totalSales * 0.1, // 10% default
-          expected: weightedPipeline * 0.1, 
-          deductions: 0 
-        },
-        orders: ordersData,
-        pipeline: { 
-          value: pipelineValue, 
-          weighted: weightedPipeline,
-          stages 
-        }
-      });
-
-      // Set Today's Visits
-      setTodayVisits(todayActivities || []);
-
-      // Set Pipeline Deals (top 10 by probability)
-      setPipelineDeals(
-        openDeals
-          .sort((a, b) => b.probability - a.probability)
-          .slice(0, 10)
-      );
-
-      // Set Linked Orders
-      setLinkedOrders(orderLinks || []);
-
-      // Calculate Next Actions
-      const actions = [];
-      
-      // Check for quotes without response
-      const oldQuotes = quotes?.filter(q => 
-        q.status === 'sent' && 
-        new Date(q.sent_at) < new Date(Date.now() - 72 * 60 * 60 * 1000)
-      );
-      if (oldQuotes && oldQuotes.length > 0) {
-        actions.push({
-          type: 'urgent',
-          text: `${oldQuotes.length} הצעות ללא מענה מעל 72 שעות`,
-          icon: '⚠️',
-          priority: 'high'
-        });
-      }
-
-      // Check for hot leads
-      const hotLeads = leads?.filter(l => l.score > 70 && !l.first_touch_at);
-      if (hotLeads && hotLeads.length > 0) {
-        actions.push({
-          type: 'lead',
-          text: `${hotLeads.length} לידים חמים ממתינים לתגובה`,
-          icon: '🔥',
-          priority: 'high'
-        });
-      }
-
-      // Check for won deals without orders
-      const wonDealsWithoutOrders = deals?.filter(d => 
-        d.stage === 'won' && 
-        !orderLinks?.some(ol => ol.deal_id === d.id)
-      );
-      if (wonDealsWithoutOrders && wonDealsWithoutOrders.length > 0) {
-        actions.push({
-          type: 'order',
-          text: `${wonDealsWithoutOrders.length} עסקאות שנסגרו ללא הזמנה`,
-          icon: '🛒',
-          priority: 'high'
-        });
-      }
-
-      setNextActions(actions);
-
+      if (error) throw error;
+      setRecentDeals(data || []);
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setDataLoading(false);
+      console.error('Error loading recent deals:', error);
     }
   };
 
-  const createOrderFromDeal = async (dealId: string) => {
+  const loadRecentLeads = async () => {
     try {
-      // קריאה לפונקציה ב-Supabase
       const { data, error } = await supabase
-        .rpc('create_order_from_deal', {
-          p_deal_id: dealId,
-          p_customer_id: null // או ID קיים אם יש
-        });
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setRecentLeads(data || []);
+    } catch (error) {
+      console.error('Error loading recent leads:', error);
+    }
+  };
+
+  const loadOrderLinks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('order_links')
+        .select(`
+          *,
+          deal:deals(
+            *,
+            lead:leads(*)
+          ),
+          quote:quotes(*),
+          order:orders(*)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setOrderLinks(data || []);
+    } catch (error) {
+      console.error('Error loading order links:', error);
+    }
+  };
+
+  const loadPipelineData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('deals')
+        .select('stage, total_amount');
 
       if (error) throw error;
 
-      alert(`הזמנה נוצרה בהצלחה! מספר הזמנה: ${data}`);
-      
-      // רענן את הנתונים
-      loadDashboardData();
-      setShowCreateOrder(false);
-      setSelectedDeal(null);
-      
-      // נווט להזמנה החדשה
-      router.push(`/orders/${data}`);
-      
-    } catch (error: any) {
-      console.error('Error creating order:', error);
-      alert('שגיאה ביצירת הזמנה: ' + error.message);
+      const stages = ['lead', 'qualification', 'proposal', 'negotiation', 'won', 'lost'];
+      const pipelineByStage = stages.map(stage => {
+        const stageDeals = data?.filter(d => d.stage === stage) || [];
+        const totalValue = stageDeals.reduce((sum, d) => sum + (d.total_amount || 0), 0);
+        return {
+          stage,
+          count: stageDeals.length,
+          value: totalValue
+        };
+      });
+
+      setPipelineData(pipelineByStage);
+    } catch (error) {
+      console.error('Error loading pipeline data:', error);
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('he-IL', {
+      style: 'currency',
+      currency: 'ILS'
+    }).format(amount);
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('he-IL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  const getStageColor = (stage: string) => {
+    const colors: Record<string, string> = {
+      lead: '#9CA3AF',
+      qualification: '#60A5FA',
+      proposal: '#A78BFA',
+      negotiation: '#FBBF24',
+      won: '#34D399',
+      lost: '#F87171'
+    };
+    return colors[stage] || '#9CA3AF';
+  };
+
+  const getStageLabel = (stage: string) => {
+    const labels: Record<string, string> = {
+      lead: 'ליד',
+      qualification: 'בדיקת התאמה',
+      proposal: 'הצעת מחיר',
+      negotiation: 'משא ומתן',
+      won: 'סגירה מוצלחת',
+      lost: 'אבוד'
+    };
+    return labels[stage] || stage;
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      new: '#60A5FA',
+      contacted: '#A78BFA',
+      qualified: '#34D399',
+      unqualified: '#F87171'
+    };
+    return colors[status] || '#9CA3AF';
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      new: 'חדש',
+      contacted: 'נוצר קשר',
+      qualified: 'מתאים',
+      unqualified: 'לא מתאים'
+    };
+    return labels[status] || status;
   };
 
   const handleLogout = async () => {
@@ -492,917 +345,768 @@ export default function SalesAgentDashboard() {
     router.push('/login');
   };
 
-  const formatCurrency = (amount: number) => {
-    const displayAmount = includeVat ? amount * 1.17 : amount;
-    return new Intl.NumberFormat('he-IL', {
-      style: 'currency',
-      currency: 'ILS',
-      minimumFractionDigits: 0
-    }).format(displayAmount);
-  };
-
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 90) return '#10B981';
-    if (percentage >= 70) return '#F59E0B';
-    if (percentage >= 50) return '#EF4444';
-    return '#6B7280';
-  };
-
-  const getAgeColor = (days: number) => {
-    if (days > 14) return '#EF4444';
-    if (days > 7) return '#F59E0B';
-    return '#10B981';
-  };
-
-  const calculateDealAge = (createdAt: string) => {
-    const created = new Date(createdAt);
-    const now = new Date();
-    return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-  };
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('he-IL', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   if (loading) {
     return (
-      <div style={{
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
         minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F9FAFB',
-        direction: 'rtl'
+        backgroundColor: '#F3F4F6'
       }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
-          <h2 style={{ fontSize: '20px', color: '#6B7280' }}>טוען נתונים...</h2>
+        <div style={{ 
+          fontSize: '24px', 
+          color: '#6B7280',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '20px'
+        }}>
+          <div style={{
+            width: '50px',
+            height: '50px',
+            border: '5px solid #E5E7EB',
+            borderTop: '5px solid #3B82F6',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          <span>טוען נתונים...</span>
         </div>
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#F9FAFB',
-      direction: 'rtl',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#F3F4F6',
+      direction: 'rtl'
     }}>
       {/* Header */}
-      <header style={{
-        backgroundColor: 'white',
+      <header style={{ 
+        backgroundColor: 'white', 
         borderBottom: '1px solid #E5E7EB',
-        padding: '16px 0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
       }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', margin: 0 }}>
-                💼 דאשבורד סוכן מכירות
-              </h1>
-              <p style={{ fontSize: '14px', color: '#6B7280', marginTop: '4px' }}>
-                {user?.email?.split('@')[0]} | {new Date().toLocaleDateString('he-IL')}
-              </p>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <select 
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  border: '1px solid #D1D5DB',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="today">היום</option>
-                <option value="week">השבוע</option>
-                <option value="month">החודש</option>
-                <option value="quarter">רבעון</option>
-              </select>
-              
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={includeVat}
-                  onChange={(e) => setIncludeVat(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                כולל מע״מ
-              </label>
-
+        <div style={{ 
+          maxWidth: '1400px', 
+          margin: '0 auto', 
+          padding: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
+            <h1 style={{ 
+              fontSize: '28px', 
+              fontWeight: 'bold',
+              color: '#1F2937',
+              margin: 0
+            }}>
+              📊 לוח בקרה - מכירות
+            </h1>
+            <nav style={{ display: 'flex', gap: '20px' }}>
               <button
-                onClick={() => loadDashboardData()}
-                disabled={dataLoading}
+                onClick={() => setSelectedView('overview')}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: dataLoading ? '#9CA3AF' : '#3B82F6',
-                  color: 'white',
+                  backgroundColor: selectedView === 'overview' ? '#3B82F6' : 'transparent',
+                  color: selectedView === 'overview' ? 'white' : '#6B7280',
                   border: 'none',
-                  borderRadius: '8px',
-                  cursor: dataLoading ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                {dataLoading ? '⏳' : '🔄'} רענן
-              </button>
-
-              <button
-                onClick={handleLogout}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#EF4444',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '16px',
                   fontWeight: '500'
                 }}
               >
-                יציאה
+                סקירה כללית
               </button>
-            </div>
+              <button
+                onClick={() => setSelectedView('pipeline')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: selectedView === 'pipeline' ? '#3B82F6' : 'transparent',
+                  color: selectedView === 'pipeline' ? 'white' : '#6B7280',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '500'
+                }}
+              >
+                צינור מכירות
+              </button>
+              <button
+                onClick={() => setSelectedView('leads')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: selectedView === 'leads' ? '#3B82F6' : 'transparent',
+                  color: selectedView === 'leads' ? 'white' : '#6B7280',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '500'
+                }}
+              >
+                לידים
+              </button>
+              <button
+                onClick={() => setSelectedView('reports')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: selectedView === 'reports' ? '#3B82F6' : 'transparent',
+                  color: selectedView === 'reports' ? 'white' : '#6B7280',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '500'
+                }}
+              >
+                דוחות
+              </button>
+            </nav>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => router.push('/sales/leads/new')}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#10B981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: '500'
+              }}
+            >
+              + ליד חדש
+            </button>
+            <button
+              onClick={() => router.push('/sales/deals/new')}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#3B82F6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: '500'
+              }}
+            >
+              + עסקה חדשה
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#EF4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              יציאה
+            </button>
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px 16px' }}>
-        {/* KPI Cards - הוספנו כרטיס הזמנות */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-          gap: '16px', 
-          marginBottom: '24px' 
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #3B82F6'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>לידים בתקופה</p>
-                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '8px 0' }}>
-                  {kpiData.leads.total}
-                </p>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                  <span style={{
-                    fontSize: '12px',
-                    backgroundColor: '#D1FAE5',
-                    color: '#065F46',
-                    padding: '4px 8px',
-                    borderRadius: '4px'
-                  }}>
-                    חדש: {kpiData.leads.new}
-                  </span>
-                  <span style={{
-                    fontSize: '12px',
-                    backgroundColor: '#DBEAFE',
-                    color: '#1E40AF',
-                    padding: '4px 8px',
-                    borderRadius: '4px'
-                  }}>
-                    חוזר: {kpiData.leads.returning}
-                  </span>
+      <main style={{ 
+        maxWidth: '1400px', 
+        margin: '0 auto', 
+        padding: '30px 20px'
+      }}>
+        {/* Overview View */}
+        {selectedView === 'overview' && (
+          <>
+            {/* Stats Cards */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '20px',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #3B82F6'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div>
+                    <p style={{ color: '#6B7280', fontSize: '14px', margin: '0 0 8px 0' }}>סה"כ עסקאות</p>
+                    <p style={{ fontSize: '32px', fontWeight: 'bold', margin: 0, color: '#1F2937' }}>
+                      {stats.totalDeals}
+                    </p>
+                    <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '8px' }}>
+                      {stats.pendingDeals} פתוחות
+                    </p>
+                  </div>
+                  <div style={{ fontSize: '30px' }}>📊</div>
                 </div>
               </div>
-              <span style={{ fontSize: '32px' }}>👥</span>
-            </div>
-          </div>
 
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #10B981'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>מכירות נטו</p>
-                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '8px 0' }}>
-                  {formatCurrency(kpiData.sales.amount)}
-                </p>
-                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '8px' }}>
-                  ממוצע לעסקה: {formatCurrency(kpiData.sales.avgDealSize)}
-                </p>
-              </div>
-              <span style={{ fontSize: '32px' }}>💰</span>
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #F59E0B'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>Win Rate</p>
-                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '8px 0' }}>
-                  {kpiData.quotes.winRate}%
-                </p>
-                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '8px' }}>
-                  {kpiData.quotes.won}/{kpiData.quotes.sent} הצעות
-                </p>
-              </div>
-              <span style={{ fontSize: '32px' }}>🎯</span>
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #8B5CF6'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>עמלות החודש</p>
-                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '8px 0' }}>
-                  {formatCurrency(kpiData.commission.approved)}
-                </p>
-                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '8px' }}>
-                  צפוי: {formatCurrency(kpiData.commission.expected)}
-                </p>
-              </div>
-              <span style={{ fontSize: '32px' }}>💵</span>
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #EC4899'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <p style={{ color: '#6B7280', fontSize: '14px', margin: 0 }}>הזמנות</p>
-                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '8px 0' }}>
-                  {kpiData.orders.total}
-                </p>
-                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '8px' }}>
-                  ממתינות: {kpiData.orders.pending} | הושלמו: {kpiData.orders.completed}
-                </p>
-              </div>
-              <span style={{ fontSize: '32px' }}>🛒</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Target Progress */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          marginBottom: '24px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>התקדמות יעד חודשי</h3>
-            <span style={{ fontSize: '14px', color: '#6B7280' }}>
-              יעד: {formatCurrency(kpiData.sales.target)}
-            </span>
-          </div>
-          <div style={{ position: 'relative', marginBottom: '16px' }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: '#E5E7EB',
-              borderRadius: '9999px',
-              height: '32px',
-              overflow: 'hidden'
-            }}>
-              <div 
-                style={{ 
-                  width: `${Math.min(kpiData.sales.attainment, 100)}%`,
-                  backgroundColor: getProgressColor(kpiData.sales.attainment),
-                  height: '100%',
-                  borderRadius: '9999px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                  transition: 'width 0.5s ease-in-out'
-                }}
-              >
-                {kpiData.sales.attainment.toFixed(1)}%
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-            <span style={{ color: '#10B981' }}>
-              הושג: {formatCurrency(kpiData.sales.amount)}
-            </span>
-            <span style={{ color: '#EF4444' }}>
-              נותר: {formatCurrency(Math.max(0, kpiData.sales.target - kpiData.sales.amount))}
-            </span>
-            <span style={{ fontWeight: '600', color: '#3B82F6' }}>
-              Forecast: {formatCurrency(kpiData.sales.amount + kpiData.pipeline.weighted)}
-            </span>
-          </div>
-        </div>
-
-        {/* Main Content Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-          gap: '24px',
-          marginBottom: '24px'
-        }}>
-          {/* Sales Funnel */}
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>משפך מכירות</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {kpiData.pipeline.stages.map((stage, index) => (
-                <div key={index}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '8px'
-                  }}>
-                    <span style={{ fontSize: '14px', fontWeight: '500' }}>{stage.name}</span>
-                    <span style={{ fontSize: '14px', color: '#6B7280' }}>{stage.count}</span>
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #10B981'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div>
+                    <p style={{ color: '#6B7280', fontSize: '14px', margin: '0 0 8px 0' }}>שווי כולל</p>
+                    <p style={{ fontSize: '28px', fontWeight: 'bold', margin: 0, color: '#1F2937' }}>
+                      {formatCurrency(stats.totalValue)}
+                    </p>
+                    <p style={{ color: '#10B981', fontSize: '14px', marginTop: '8px' }}>
+                      +12% מהחודש שעבר
+                    </p>
                   </div>
-                  <div style={{
-                    width: '100%',
-                    backgroundColor: '#E5E7EB',
-                    borderRadius: '4px',
-                    height: '24px',
-                    overflow: 'hidden'
-                  }}>
-                    <div 
-                      style={{ 
-                        width: kpiData.pipeline.stages[0].count > 0 
-                          ? `${(stage.count / kpiData.pipeline.stages[0].count) * 100}%`
-                          : '0%',
-                        backgroundColor: stage.color,
-                        height: '100%',
-                        transition: 'width 0.3s ease-in-out'
+                  <div style={{ fontSize: '30px' }}>💰</div>
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #A78BFA'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div>
+                    <p style={{ color: '#6B7280', fontSize: '14px', margin: '0 0 8px 0' }}>אחוז המרה</p>
+                    <p style={{ fontSize: '32px', fontWeight: 'bold', margin: 0, color: '#1F2937' }}>
+                      {stats.conversionRate.toFixed(1)}%
+                    </p>
+                    <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '8px' }}>
+                      {stats.wonDeals} סגירות מוצלחות
+                    </p>
+                  </div>
+                  <div style={{ fontSize: '30px' }}>🎯</div>
+                </div>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #FBBF24'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div>
+                    <p style={{ color: '#6B7280', fontSize: '14px', margin: '0 0 8px 0' }}>גודל עסקה ממוצע</p>
+                    <p style={{ fontSize: '28px', fontWeight: 'bold', margin: 0, color: '#1F2937' }}>
+                      {formatCurrency(stats.avgDealSize)}
+                    </p>
+                    <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '8px' }}>
+                      מתוך {stats.totalDeals} עסקאות
+                    </p>
+                  </div>
+                  <div style={{ fontSize: '30px' }}>📈</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Activity */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr',
+              gap: '20px',
+              marginBottom: '30px'
+            }}>
+              {/* Recent Deals */}
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>
+                  עסקאות אחרונות
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {recentDeals.map((deal) => (
+                    <div
+                      key={deal.id}
+                      style={{
+                        padding: '15px',
+                        backgroundColor: '#F9FAFB',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
                       }}
-                    />
-                  </div>
-                  {stage.value > 0 && (
-                    <span style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px', display: 'block' }}>
-                      {formatCurrency(stage.value)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Today's Visits */}
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>ביקורים היום</h3>
-              <button
-                onClick={() => router.push('/sales/visits/new')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#3B82F6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                + ביקור חדש
-              </button>
-            </div>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              maxHeight: '280px',
-              overflowY: 'auto'
-            }}>
-              {todayVisits.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#6B7280', padding: '20px' }}>
-                  אין ביקורים מתוכננים להיום
-                </p>
-              ) : (
-                todayVisits.map((visit) => (
-                  <div key={visit.id} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between', 
-                    padding: '12px', 
-                    backgroundColor: '#F9FAFB', 
-                    borderRadius: '8px',
-                    border: '1px solid #E5E7EB'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                        {formatTime(visit.at)}
-                      </span>
-                      <div>
-                        <p style={{ fontSize: '14px', fontWeight: '500', margin: 0 }}>
-                          {visit.business_name || 'ללא שם'}
-                        </p>
-                        <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>
-                          {visit.city || 'ללא עיר'}
-                        </p>
+                      onClick={() => router.push(`/sales/deals/${deal.id}`)}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                        <div>
+                          <p style={{ fontWeight: '500', margin: '0 0 4px 0' }}>
+                            {deal.lead?.business_name || 'לקוח'}
+                          </p>
+                          <p style={{ fontSize: '14px', color: '#6B7280', margin: 0 }}>
+                            {formatCurrency(deal.total_amount)}
+                          </p>
+                        </div>
+                        <span style={{
+                          padding: '4px 12px',
+                          backgroundColor: getStageColor(deal.stage),
+                          color: 'white',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {getStageLabel(deal.stage)}
+                        </span>
                       </div>
                     </div>
-                    <span style={{
-                      fontSize: '12px',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: visit.status === 'completed' ? '#D1FAE5' : '#FEF3C7',
-                      color: visit.status === 'completed' ? '#065F46' : '#92400E'
-                    }}>
-                      {visit.status === 'completed' ? 'בוצע' : 'ממתין'}
-                    </span>
-                  </div>
-                ))
-              )}
+                  ))}
+                </div>
+              </div>
+
+              {/* Recent Leads */}
+              <div style={{
+                backgroundColor: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>
+                  לידים חדשים
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {recentLeads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      style={{
+                        padding: '15px',
+                        backgroundColor: '#F9FAFB',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onClick={() => router.push(`/sales/leads/${lead.id}`)}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                        <div>
+                          <p style={{ fontWeight: '500', margin: '0 0 4px 0' }}>
+                            {lead.business_name}
+                          </p>
+                          <p style={{ fontSize: '14px', color: '#6B7280', margin: 0 }}>
+                            {lead.contact_name} • {lead.phone}
+                          </p>
+                        </div>
+                        <span style={{
+                          padding: '4px 12px',
+                          backgroundColor: getStatusColor(lead.status),
+                          color: 'white',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {getStatusLabel(lead.status)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Next Best Actions */}
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
-              📋 מה לעשות עכשיו
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {nextActions.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#10B981', padding: '20px' }}>
-                  ✅ אין משימות דחופות - מצוין!
-                </p>
-              ) : (
-                nextActions.map((action, index) => (
-                  <div key={index} style={{ 
-                    display: 'flex', 
-                    alignItems: 'flex-start', 
-                    gap: '12px', 
-                    padding: '12px', 
-                    backgroundColor: action.priority === 'high' ? '#FEF2F2' : '#FEF3C7', 
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s',
-                    border: `1px solid ${action.priority === 'high' ? '#FCA5A5' : '#FCD34D'}`
-                  }}>
-                    <span style={{ fontSize: '20px' }}>{action.icon}</span>
-                    <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{action.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '16px',
-          marginBottom: '24px'
-        }}>
-          <button
-            onClick={() => router.push('/sales/activities/call')}
-            style={{
-              padding: '16px',
-              backgroundColor: '#10B981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>📞</span>
-            <span>רישום שיחה</span>
-          </button>
-          
-          <button
-            onClick={() => router.push('/sales/visits/new')}
-            style={{
-              padding: '16px',
-              backgroundColor: '#3B82F6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>📍</span>
-            <span>רישום ביקור</span>
-          </button>
-          
-          <button
-            onClick={() => router.push('/sales/quotes/new')}
-            style={{
-              padding: '16px',
-              backgroundColor: '#8B5CF6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>📝</span>
-            <span>הצעת מחיר</span>
-          </button>
-          
-          <button
-            onClick={() => router.push('/orders')}
-            style={{
-              padding: '16px',
-              backgroundColor: '#EC4899',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>🛒</span>
-            <span>הזמנות</span>
-          </button>
-          
-          <button
-            onClick={() => router.push('/sales/reports')}
-            style={{
-              padding: '16px',
-              backgroundColor: '#F59E0B',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>📊</span>
-            <span>דוחות</span>
-          </button>
-        </div>
-
-        {/* Pipeline Table with Order Creation */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>צנרת פעילה</h3>
-            <span style={{ fontSize: '14px', color: '#6B7280' }}>
-              סה״כ משוקלל: {formatCurrency(kpiData.pipeline.weighted)}
-            </span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '14px' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
-                  <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    לקוח
-                  </th>
-                  <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    שלב
-                  </th>
-                  <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    סכום
-                  </th>
-                  <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    הסתברות
-                  </th>
-                  <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    גיל (ימים)
-                  </th>
-                  <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    צפי סגירה
-                  </th>
-                  <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', color: '#374151' }}>
-                    פעולות
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {pipelineDeals.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>
-                      אין עסקאות פעילות בצנרת
-                    </td>
-                  </tr>
-                ) : (
-                  pipelineDeals.map((deal) => {
-                    const age = calculateDealAge(deal.created_at);
-                    const hasOrder = linkedOrders.some(ol => ol.deal_id === deal.id);
-                    
-                    return (
-                      <tr key={deal.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                        <td style={{ padding: '12px 8px', fontWeight: '500' }}>
-                          {deal.lead?.business_name || 'ללא שם'}
-                        </td>
-                        <td style={{ padding: '12px 8px' }}>
-                          <span style={{
-                            fontSize: '12px',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            backgroundColor: 
-                              deal.stage === 'won' ? '#D1FAE5' :
-                              deal.stage === 'negotiation' ? '#DBEAFE' : 
-                              deal.stage === 'quote' ? '#FEF3C7' : '#F3F4F6',
-                            color: 
-                              deal.stage === 'won' ? '#065F46' :
-                              deal.stage === 'negotiation' ? '#1E40AF' : 
-                              deal.stage === 'quote' ? '#92400E' : '#6B7280'
-                          }}>
-                            {deal.stage === 'won' ? 'נסגר' :
-                             deal.stage === 'negotiation' ? 'משא ומתן' : 
-                             deal.stage === 'quote' ? 'הצעה' : 
-                             deal.stage === 'meeting' ? 'פגישה' : deal.stage}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 8px', fontWeight: '500' }}>
-                          {formatCurrency(deal.amount_before_vat)}
-                        </td>
-                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                          <span style={{
-                            fontWeight: '600',
-                            color: 
-                              deal.probability >= 70 ? '#10B981' : 
-                              deal.probability >= 40 ? '#F59E0B' : '#EF4444'
-                          }}>
-                            {deal.probability}%
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                          <span style={{ fontWeight: '600', color: getAgeColor(age) }}>
-                            {age}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px 8px' }}>
-                          {new Date(deal.expected_close_date).toLocaleDateString('he-IL')}
-                        </td>
-                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                            {deal.stage === 'won' && !hasOrder && (
-                              <button
-                                onClick={() => {
-                                  setSelectedDeal(deal);
-                                  setShowCreateOrder(true);
-                                }}
-                                style={{
-                                  padding: '4px 12px',
-                                  backgroundColor: '#10B981',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  fontWeight: '500'
-                                }}
-                              >
-                                🛒 צור הזמנה
-                              </button>
-                            )}
-                            {hasOrder && (
-                              <span style={{
-                                padding: '4px 12px',
-                                backgroundColor: '#D1FAE5',
-                                color: '#065F46',
-                                borderRadius: '6px',
-                                fontSize: '12px'
-                              }}>
-                                ✓ קיימת הזמנה
-                              </span>
-                            )}
-                            <button
-                              onClick={() => router.push(`/sales/deals/${deal.id}`)}
-                              style={{
-                                padding: '4px 12px',
-                                backgroundColor: 'transparent',
-                                color: '#3B82F6',
-                                border: '1px solid #3B82F6',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: '500'
-                              }}
-                            >
-                              עדכון
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Recent Orders Section */}
-        {linkedOrders.length > 0 && (
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-            marginTop: '24px'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
-              🛒 הזמנות אחרונות
-            </h3>
-            <div style={{ display: 'grid', gap: '12px' }}>
-              {linkedOrders.slice(0, 5).map((link) => (
-                <div key={link.id} style={{
-                  padding: '12px',
-                  backgroundColor: '#F9FAFB',
-                  borderRadius: '8px',
-                  border: '1px solid #E5E7EB',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <p style={{ fontWeight: '500', margin: '0 0 4px 0' }}>
-                      {link.deal?.lead?.business_name || 'לקוח'}
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>
-                      סכום: {formatCurrency(link.deal?.amount_before_vat || 0)} | 
-                      {' ' + new Date(link.created_at).toLocaleDateString('he-IL')}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => router.push(`/orders/${link.order_id}`)}
+            {/* Order Links */}
+            <div style={{
+              backgroundColor: 'white',
+              padding: '20px',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '20px' }}>
+                קישורים להזמנות
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {orderLinks.map((link) => (
+                  <div
+                    key={link.id}
                     style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#3B82F6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
+                      padding: '15px',
+                      backgroundColor: '#F9FAFB',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
                     }}
                   >
-                    צפה בהזמנה
-                  </button>
+                    <div>
+                      <p style={{ fontWeight: '500', margin: '0 0 4px 0' }}>
+                        {link.deal?.lead?.business_name || 
+                         link.quote?.quote_number || 
+                         link.order?.order_number || 
+                         'לא ידוע'}
+                      </p>
+                      <p style={{ fontSize: '12px', color: '#6B7280', margin: 0 }}>
+                        סכום: {formatCurrency(
+                          link.deal?.amount_before_vat || 
+                          link.quote?.total_amount || 
+                          link.order?.total_amount || 
+                          0
+                        )} | 
+                        סוג: {link.link_type === 'deal' ? 'עסקה' : 
+                              link.link_type === 'quote' ? 'הצעת מחיר' : 'הזמנה'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (link.link_type === 'deal' && link.deal?.id) {
+                          router.push(`/sales/deals/${link.deal.id}`);
+                        } else if (link.link_type === 'quote' && link.quote?.id) {
+                          router.push(`/sales/quotes/${link.quote.id}`);
+                        } else if (link.link_type === 'order' && link.order?.id) {
+                          router.push(`/orders/${link.order.id}`);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#3B82F6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                    >
+                      צפייה
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Pipeline View */}
+        {selectedView === 'pipeline' && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '30px' }}>
+              צינור המכירות
+            </h2>
+            <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '20px' }}>
+              {pipelineData.map((stage) => (
+                <div
+                  key={stage.stage}
+                  style={{
+                    minWidth: '200px',
+                    backgroundColor: '#F9FAFB',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    borderTop: `4px solid ${getStageColor(stage.stage)}`
+                  }}
+                >
+                  <h3 style={{ 
+                    fontSize: '16px', 
+                    fontWeight: '600',
+                    color: '#374151',
+                    marginBottom: '10px'
+                  }}>
+                    {getStageLabel(stage.stage)}
+                  </h3>
+                  <div style={{ marginBottom: '15px' }}>
+                    <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0' }}>
+                      {stage.count}
+                    </p>
+                    <p style={{ fontSize: '14px', color: '#6B7280', margin: '4px 0 0 0' }}>
+                      עסקאות
+                    </p>
+                  </div>
+                  <div style={{
+                    paddingTop: '15px',
+                    borderTop: '1px solid #E5E7EB'
+                  }}>
+                    <p style={{ fontSize: '14px', color: '#6B7280', margin: '0' }}>
+                      ערך כולל
+                    </p>
+                    <p style={{ fontSize: '18px', fontWeight: '600', margin: '4px 0 0 0' }}>
+                      {formatCurrency(stage.value)}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-      </main>
 
-      {/* Create Order Modal */}
-      {showCreateOrder && selectedDeal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 50
-        }}>
+        {/* Leads View */}
+        {selectedView === 'leads' && (
           <div style={{
             backgroundColor: 'white',
+            padding: '30px',
             borderRadius: '12px',
-            padding: '32px',
-            maxWidth: '500px',
-            width: '90%',
-            direction: 'rtl'
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
-              יצירת הזמנה מעסקה
-            </h2>
-            
-            <div style={{ marginBottom: '24px' }}>
-              <p style={{ marginBottom: '8px' }}>
-                <strong>לקוח:</strong> {selectedDeal.lead?.business_name}
-              </p>
-              <p style={{ marginBottom: '8px' }}>
-                <strong>סכום העסקה:</strong> {formatCurrency(selectedDeal.amount_before_vat)}
-              </p>
-              <p style={{ marginBottom: '8px' }}>
-                <strong>איש קשר:</strong> {selectedDeal.lead?.contact_name || '-'}
-              </p>
-              <p>
-                <strong>טלפון:</strong> {selectedDeal.lead?.phone || '-'}
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '30px'
+            }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                ניהול לידים
+              </h2>
               <button
-                onClick={() => {
-                  setShowCreateOrder(false);
-                  setSelectedDeal(null);
-                }}
+                onClick={() => router.push('/sales/leads')}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: '#E5E7EB',
-                  color: '#374151',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                ביטול
-              </button>
-              <button
-                onClick={() => createOrderFromDeal(selectedDeal.id)}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#10B981',
+                  backgroundColor: '#3B82F6',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
+                  fontSize: '16px'
                 }}
               >
-                צור הזמנה
+                כל הלידים
               </button>
             </div>
+            
+            {/* Lead Stats */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '20px',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#EFF6FF',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '0', color: '#3B82F6' }}>
+                  {stats.totalLeads}
+                </p>
+                <p style={{ color: '#6B7280', margin: '8px 0 0 0' }}>סה"כ לידים</p>
+              </div>
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#F0FDF4',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '0', color: '#10B981' }}>
+                  {stats.newLeads}
+                </p>
+                <p style={{ color: '#6B7280', margin: '8px 0 0 0' }}>לידים חדשים השבוע</p>
+              </div>
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#FEF3C7',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', margin: '0', color: '#F59E0B' }}>
+                  {stats.qualifiedLeads}
+                </p>
+                <p style={{ color: '#6B7280', margin: '8px 0 0 0' }}>לידים מתאימים</p>
+              </div>
+            </div>
+
+            {/* Recent Leads Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>שם העסק</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>איש קשר</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>טלפון</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>סטטוס</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>תאריך</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#6B7280' }}>פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentLeads.map((lead) => (
+                    <tr key={lead.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
+                      <td style={{ padding: '12px', fontWeight: '500' }}>{lead.business_name}</td>
+                      <td style={{ padding: '12px' }}>{lead.contact_name}</td>
+                      <td style={{ padding: '12px' }}>{lead.phone}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{
+                          padding: '4px 12px',
+                          backgroundColor: getStatusColor(lead.status),
+                          color: 'white',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {getStatusLabel(lead.status)}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', color: '#6B7280' }}>
+                        {formatDate(lead.created_at)}
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <button
+                          onClick={() => router.push(`/sales/leads/${lead.id}`)}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#3B82F6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          צפייה
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Reports View */}
+        {selectedView === 'reports' && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '30px' }}>
+              דוחות ואנליטיקס
+            </h2>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '20px'
+            }}>
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#F9FAFB',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px' }}>
+                  📈 דוח ביצועים חודשי
+                </h3>
+                <p style={{ color: '#6B7280', marginBottom: '15px' }}>
+                  סקירת ביצועי המכירות לחודש הנוכחי
+                </p>
+                <button style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  הצג דוח
+                </button>
+              </div>
+
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#F9FAFB',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px' }}>
+                  👥 דוח לקוחות
+                </h3>
+                <p style={{ color: '#6B7280', marginBottom: '15px' }}>
+                  ניתוח מעמיק של בסיס הלקוחות
+                </p>
+                <button style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  הצג דוח
+                </button>
+              </div>
+
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#F9FAFB',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px' }}>
+                  💰 דוח הכנסות
+                </h3>
+                <p style={{ color: '#6B7280', marginBottom: '15px' }}>
+                  פירוט הכנסות לפי תקופה ומוצר
+                </p>
+                <button style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  הצג דוח
+                </button>
+              </div>
+
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#F9FAFB',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '10px' }}>
+                  🎯 דוח יעדים
+                </h3>
+                <p style={{ color: '#6B7280', marginBottom: '15px' }}>
+                  מעקב אחר עמידה ביעדים
+                </p>
+                <button style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#3B82F6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  הצג דוח
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -14,7 +14,7 @@ interface User {
 
 export default function SettingsPage() {
   const [users, setUsers] = useState<User[]>([]);
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' as const });
+  const [newUser, setNewUser] = useState<{ username: string; password: string; role: 'admin' | 'user' }>({ username: '', password: '', role: 'user' });
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ username: string; password: string; role: 'admin' | 'user' }>({ username: '', password: '', role: 'user' });
   const [loading, setLoading] = useState(true);

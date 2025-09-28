@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Users, Shield, UserPlus, Edit, Trash2, Check, X } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 
 interface User {
   id: string;
@@ -44,7 +44,10 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState<string>('');
 
-  const supabase = createClientComponentClient();
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   // טעינת משתמשים
   useEffect(() => {

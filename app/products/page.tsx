@@ -33,6 +33,12 @@ export default function ProductsPage() {
   const [imagePreview, setImagePreview] = useState<string>('')
   const [galleryPreviews, setGalleryPreviews] = useState<string[]>([])
   const [selectedProductImage, setSelectedProductImage] = useState<{[key: string]: number}>({})
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [modalImage, setModalImage] = useState<string>('')
+  const [modalImages, setModalImages] = useState<string[]>([])
+  const [modalImageIndex, setModalImageIndex] = useState(0)
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -50,6 +56,17 @@ export default function ProductsPage() {
     checkUser()
     fetchProducts()
   }, [])
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showImageModal) {
+        setShowImageModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [showImageModal])
 
   const checkUser = async () => {
     try {
@@ -161,6 +178,67 @@ export default function ProductsPage() {
     const newPreviews = galleryPreviews.filter((_, i) => i !== index)
     setFormData({ ...formData, gallery_images: newGalleryImages })
     setGalleryPreviews(newPreviews)
+  }
+
+  // Drag and Drop functions
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+
+    const newGalleryImages = [...galleryPreviews]
+    const draggedImage = newGalleryImages[draggedIndex]
+    
+    // Remove dragged item
+    newGalleryImages.splice(draggedIndex, 1)
+    
+    // Insert at new position
+    const adjustedDropIndex = dropIndex > draggedIndex ? dropIndex - 1 : dropIndex
+    newGalleryImages.splice(adjustedDropIndex, 0, draggedImage)
+    
+    setGalleryPreviews(newGalleryImages)
+    setFormData({ ...formData, gallery_images: newGalleryImages })
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // Modal functions
+  const openImageModal = (product: Product, imageIndex: number = 0) => {
+    const allImages = [product.image_url, ...(product.gallery_images || [])].filter(Boolean)
+    setModalImages(allImages)
+    setModalImageIndex(imageIndex)
+    setModalImage(allImages[imageIndex])
+    setShowImageModal(true)
+  }
+
+  const navigateModal = (direction: 'prev' | 'next') => {
+    let newIndex = modalImageIndex
+    
+    if (direction === 'prev') {
+      newIndex = modalImageIndex > 0 ? modalImageIndex - 1 : modalImages.length - 1
+    } else {
+      newIndex = modalImageIndex < modalImages.length - 1 ? modalImageIndex + 1 : 0
+    }
+    
+    setModalImageIndex(newIndex)
+    setModalImage(modalImages[newIndex])
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -283,12 +361,6 @@ export default function ProductsPage() {
     setSelectedProductImage({ ...selectedProductImage, [productId]: imageIndex })
   }
 
-  function getCurrentImage(product: Product): string | undefined {
-    const selectedIndex = selectedProductImage[product.id] || 0
-    const allImages = [product.image_url, ...(product.gallery_images || [])].filter(Boolean)
-    return allImages[selectedIndex]
-  }
-
   const filteredProducts = selectedCategory === 'הכל' 
     ? products 
     : products.filter(p => p.category === selectedCategory)
@@ -317,6 +389,145 @@ export default function ProductsPage() {
       backgroundColor: '#f5f5f5',
       direction: 'rtl'
     }}>
+      {/* Image Modal */}
+      {showImageModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.9)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'zoom-out'
+          }}
+          onClick={() => setShowImageModal(false)}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowImageModal(false)
+            }}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+          >
+            ✕
+          </button>
+
+          {modalImages.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigateModal('prev')
+                }}
+                style={{
+                  position: 'absolute',
+                  left: '20px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+              >
+                ‹
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigateModal('next')
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '20px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+              >
+                ›
+              </button>
+            </>
+          )}
+
+          <img
+            src={modalImage}
+            alt="תצוגה מוגדלת"
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90%',
+              objectFit: 'contain',
+              cursor: 'default',
+              boxShadow: '0 0 40px rgba(0,0,0,0.5)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {modalImages.length > 1 && (
+            <div style={{
+              position: 'absolute',
+              bottom: '30px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontSize: '14px'
+            }}>
+              {modalImageIndex + 1} / {modalImages.length}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <header style={{
         backgroundColor: 'white',
@@ -540,8 +751,15 @@ export default function ProductsPage() {
                           height: '100px', 
                           objectFit: 'cover',
                           borderRadius: '8px',
-                          border: '2px solid #4CAF50'
-                        }} 
+                          border: '2px solid #4CAF50',
+                          cursor: 'zoom-in'
+                        }}
+                        onClick={() => {
+                          setModalImage(imagePreview)
+                          setModalImages([imagePreview])
+                          setModalImageIndex(0)
+                          setShowImageModal(true)
+                        }}
                       />
                       <button
                         type="button"
@@ -575,7 +793,7 @@ export default function ProductsPage() {
                 {/* גלריית תמונות */}
                 <div style={{ gridColumn: 'span 2' }}>
                   <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: '500' }}>
-                    גלריית תמונות נוספות
+                    גלריית תמונות נוספות (גרור לסידור מחדש)
                   </label>
                   <input
                     ref={galleryInputRef}
@@ -609,12 +827,44 @@ export default function ProductsPage() {
                       gap: '10px', 
                       flexWrap: 'wrap',
                       marginTop: '10px',
-                      padding: '10px',
+                      padding: '15px',
                       backgroundColor: '#f9f9f9',
-                      borderRadius: '6px'
+                      borderRadius: '6px',
+                      border: '1px solid #e0e0e0'
                     }}>
                       {galleryPreviews.map((preview, index) => (
-                        <div key={index} style={{ position: 'relative' }}>
+                        <div 
+                          key={index} 
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, index)}
+                          style={{ 
+                            position: 'relative',
+                            cursor: 'move',
+                            opacity: draggedIndex === index ? 0.5 : 1,
+                            transform: dragOverIndex === index ? 'scale(1.05)' : 'scale(1)',
+                            transition: 'transform 0.2s',
+                            border: dragOverIndex === index ? '2px solid #2196F3' : '2px solid transparent',
+                            borderRadius: '6px',
+                            padding: '2px'
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute',
+                            top: '5px',
+                            left: '5px',
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: 'bold',
+                            zIndex: 1
+                          }}>
+                            {index + 1}
+                          </div>
                           <img 
                             src={preview} 
                             alt={`גלריה ${index + 1}`} 
@@ -623,8 +873,15 @@ export default function ProductsPage() {
                               height: '80px', 
                               objectFit: 'cover',
                               borderRadius: '6px',
-                              border: '1px solid #ddd'
-                            }} 
+                              border: '1px solid #ddd',
+                              cursor: 'zoom-in'
+                            }}
+                            onClick={() => {
+                              setModalImage(preview)
+                              setModalImages(galleryPreviews)
+                              setModalImageIndex(index)
+                              setShowImageModal(true)
+                            }}
                           />
                           <button
                             type="button"
@@ -643,7 +900,8 @@ export default function ProductsPage() {
                               fontSize: '12px',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
+                              justifyContent: 'center',
+                              zIndex: 2
                             }}
                           >
                             ✕
@@ -651,6 +909,11 @@ export default function ProductsPage() {
                         </div>
                       ))}
                     </div>
+                  )}
+                  {galleryPreviews.length > 0 && (
+                    <p style={{ fontSize: '12px', color: '#666', marginTop: '5px', margin: '5px 0 0 0' }}>
+                      💡 טיפ: גרור את התמונות כדי לשנות את הסדר שלהן
+                    </p>
                   )}
                 </div>
 
@@ -772,7 +1035,6 @@ export default function ProductsPage() {
                   overflow: 'hidden',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s',
-                  cursor: 'pointer',
                   position: 'relative'
                 }}
                 onMouseEnter={(e) => {
@@ -793,8 +1055,11 @@ export default function ProductsPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
-                  position: 'relative'
-                }}>
+                  position: 'relative',
+                  cursor: currentImage ? 'zoom-in' : 'default'
+                }}
+                onClick={() => currentImage && openImageModal(product, currentImageIndex)}
+                >
                   {currentImage ? (
                     <img 
                       src={currentImage} 
@@ -807,6 +1072,27 @@ export default function ProductsPage() {
                     />
                   ) : (
                     <span style={{ fontSize: '64px', color: '#ccc' }}>🍽️</span>
+                  )}
+
+                  {/* Zoom Icon on Hover */}
+                  {currentImage && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      backgroundColor: 'rgba(0,0,0,0.7)',
+                      color: 'white',
+                      padding: '10px',
+                      borderRadius: '50%',
+                      opacity: 0,
+                      transition: 'opacity 0.3s',
+                      pointerEvents: 'none'
+                    }}
+                    className="zoom-icon"
+                    >
+                      🔍
+                    </div>
                   )}
                   
                   {/* Gallery Dots */}
@@ -1002,6 +1288,13 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* CSS for hover effect on zoom icon */}
+                <style jsx>{`
+                  div:hover .zoom-icon {
+                    opacity: 1 !important;
+                  }
+                `}</style>
               </div>
             )
           })}

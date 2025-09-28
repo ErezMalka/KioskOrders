@@ -1,31 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  Phone, 
-  Mail, 
-  Building2,
-  MapPin,
-  Calendar,
-  FileText,
-  Tag,
-  User,
-  Hash,
-  ChevronDown,
-  ChevronUp,
-  Filter,
-  Download,
-  Upload,
-  MoreVertical,
-  X,
-  Check,
-  AlertCircle
-} from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -50,11 +26,11 @@ interface CustomField {
 }
 
 const statusColors: Record<string, { bg: string; text: string; border: string }> = {
-  'ליד חדש': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  'בתהליך': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-  'לקוח פעיל': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-  'לא פעיל': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
-  'VIP': { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' }
+  'ליד חדש': { bg: '#E3F2FD', text: '#1976D2', border: '#90CAF9' },
+  'בתהליך': { bg: '#FFF3E0', text: '#F57C00', border: '#FFCC80' },
+  'לקוח פעיל': { bg: '#E8F5E9', text: '#388E3C', border: '#A5D6A7' },
+  'לא פעיל': { bg: '#FAFAFA', text: '#616161', border: '#E0E0E0' },
+  'VIP': { bg: '#F3E5F5', text: '#7B1FA2', border: '#CE93D8' }
 };
 
 export default function CustomersPage() {
@@ -114,8 +90,6 @@ export default function CustomersPage() {
   }
 
   async function loadCustomFields() {
-    // In a real app, load from database
-    // For now, using localStorage as example
     const savedFields = localStorage.getItem('customFields');
     if (savedFields) {
       setCustomFields(JSON.parse(savedFields));
@@ -155,7 +129,6 @@ export default function CustomersPage() {
     e.preventDefault();
     
     try {
-      // מכין את הנתונים לשמירה - שולח רק שדות שקיימים בטבלה
       const dataToSave: any = {
         name: formData.name || null,
         legal_id: formData.legal_id || null,
@@ -166,8 +139,6 @@ export default function CustomersPage() {
         notes: formData.notes || null
       };
 
-      // אם העמודות החדשות קיימות, נוסיף אותן
-      // נבדוק אם הן קיימות בלקוח קיים
       if (customers.length > 0 && 'status' in customers[0]) {
         dataToSave.status = formData.status || 'ליד חדש';
         dataToSave.custom_fields = formData.custom_fields || {};
@@ -203,6 +174,8 @@ export default function CustomersPage() {
         custom_fields: {}
       });
       
+      alert(editingCustomer ? 'הלקוח עודכן בהצלחה!' : 'הלקוח נוסף בהצלחה!');
+      
     } catch (error) {
       console.error('Error saving customer:', error);
       alert('שגיאה בשמירת הלקוח');
@@ -220,6 +193,7 @@ export default function CustomersPage() {
 
       if (error) throw error;
       await fetchCustomers();
+      alert('הלקוח נמחק בהצלחה');
     } catch (error) {
       console.error('Error deleting customer:', error);
       alert('שגיאה במחיקת הלקוח');
@@ -289,42 +263,227 @@ export default function CustomersPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f5f5f5',
+        direction: 'rtl'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
+          <h2>טוען לקוחות...</h2>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50" dir="rtl">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-xl mb-8 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-8">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-4xl font-bold text-white mb-2">ניהול לקוחות</h1>
-                <p className="text-blue-100">
-                  {customers.length} לקוחות רשומים במערכת
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={exportCustomers}
-                  className="bg-white/20 backdrop-blur text-white px-6 py-3 rounded-xl hover:bg-white/30 transition-all flex items-center gap-2"
-                >
-                  <Download size={20} />
-                  ייצוא
-                </button>
-                <button
-                  onClick={() => setShowFieldManager(true)}
-                  className="bg-white/20 backdrop-blur text-white px-6 py-3 rounded-xl hover:bg-white/30 transition-all flex items-center gap-2"
-                >
-                  <Tag size={20} />
-                  שדות מותאמים
-                </button>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f5f5f5',
+      direction: 'rtl'
+    }}>
+      {/* Header */}
+      <header style={{
+        backgroundColor: 'white',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        padding: '20px',
+        marginBottom: '30px'
+      }}>
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h1 style={{ 
+              margin: 0,
+              fontSize: '24px',
+              color: '#333',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              👥 ניהול לקוחות
+            </h1>
+            <p style={{ 
+              margin: '5px 0 0 0', 
+              color: '#666',
+              fontSize: '14px'
+            }}>
+              {customers.length} לקוחות רשומים במערכת
+            </p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={exportCustomers}
+              style={{
+                backgroundColor: 'white',
+                color: '#666',
+                padding: '10px 20px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f0f0f0'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white'
+              }}
+            >
+              <span>📥</span>
+              <span>ייצוא</span>
+            </button>
+            
+            <button
+              onClick={() => setShowFieldManager(true)}
+              style={{
+                backgroundColor: 'white',
+                color: '#666',
+                padding: '10px 20px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f0f0f0'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white'
+              }}
+            >
+              <span>🏷️</span>
+              <span>שדות מותאמים</span>
+            </button>
+            
+            <button
+              onClick={() => setShowForm(true)}
+              style={{
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
+            >
+              <span>➕</span>
+              <span>לקוח חדש</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
+        
+        {/* Search and Filter Section */}
+        <div style={{
+          backgroundColor: 'white',
+          padding: '20px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ display: 'flex', gap: '15px' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="🔍 חיפוש לפי שם, טלפון, אימייל או ח.פ..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              style={{
+                padding: '10px 15px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                fontSize: '14px',
+                backgroundColor: 'white',
+                minWidth: '150px'
+              }}
+            >
+              <option value="all">כל הסטטוסים</option>
+              {Object.keys(statusColors).map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Form Modal */}
+        {showForm && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '800px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{
+                padding: '25px',
+                borderBottom: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                borderRadius: '12px 12px 0 0'
+              }}>
+                <h2 style={{ margin: 0, fontSize: '20px' }}>
+                  {editingCustomer ? '✏️ עריכת לקוח' : '➕ לקוח חדש'}
+                </h2>
                 <button
                   onClick={() => {
+                    setShowForm(false);
                     setEditingCustomer(null);
                     setFormData({ 
                       name: '',
@@ -337,355 +496,257 @@ export default function CustomersPage() {
                       notes: '',
                       custom_fields: {}
                     });
-                    setShowForm(true);
                   }}
-                  className="bg-white text-blue-600 px-6 py-3 rounded-xl hover:bg-blue-50 transition-all flex items-center gap-2 font-medium shadow-lg"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '24px',
+                    cursor: 'pointer'
+                  }}
                 >
-                  <Plus size={20} />
-                  לקוח חדש
+                  ✕
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* Search and Filter Bar */}
-          <div className="p-6 bg-gray-50 border-t">
-            <div className="flex gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="חיפוש לפי שם, טלפון, אימייל או ח.פ..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pr-12 pl-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-              
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white"
-              >
-                <option value="all">כל הסטטוסים</option>
-                {Object.keys(statusColors).map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Customers Table */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="p-4 text-right font-medium text-gray-700">שם החברה</th>
-                  <th className="p-4 text-right font-medium text-gray-700">ח.פ/ע.מ</th>
-                  <th className="p-4 text-right font-medium text-gray-700">איש קשר</th>
-                  <th className="p-4 text-right font-medium text-gray-700">טלפון</th>
-                  <th className="p-4 text-right font-medium text-gray-700">אימייל</th>
-                  <th className="p-4 text-right font-medium text-gray-700">סטטוס</th>
-                  <th className="p-4 text-right font-medium text-gray-700">תאריך יצירה</th>
-                  <th className="p-4 text-center font-medium text-gray-700">פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCustomers.map((customer) => (
-                  <>
-                    <tr 
-                      key={customer.id} 
-                      className="border-b hover:bg-gray-50 transition-colors cursor-pointer"
-                      onClick={() => toggleRowExpansion(customer.id)}
-                    >
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                            {customer.name?.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{customer.name}</div>
-                            {customer.address && (
-                              <div className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                                <MapPin size={14} />
-                                {customer.address}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Hash size={16} />
-                          {customer.legal_id || '-'}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <User size={16} />
-                          {customer.contact_name || '-'}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Phone size={16} />
-                          {customer.phone || '-'}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Mail size={16} />
-                          {customer.email || '-'}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        {customer.status && (
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium border ${statusColors[customer.status]?.bg} ${statusColors[customer.status]?.text} ${statusColors[customer.status]?.border}`}>
-                            {customer.status}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-gray-600">
-                        <div className="flex items-center gap-2">
-                          <Calendar size={16} />
-                          {new Date(customer.created_at).toLocaleDateString('he-IL')}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => handleEdit(customer)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(customer.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                          <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                            {expandedRows.has(customer.id) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    
-                    {/* Expanded Row */}
-                    {expandedRows.has(customer.id) && (
-                      <tr key={`${customer.id}-expanded`}>
-                        <td colSpan={8} className="p-6 bg-gray-50 border-b">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {customer.notes && (
-                              <div>
-                                <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-                                  <FileText size={18} />
-                                  הערות
-                                </h4>
-                                <p className="text-gray-600 bg-white p-4 rounded-lg">
-                                  {customer.notes}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {/* Custom Fields */}
-                            {customFields.length > 0 && (
-                              <div>
-                                <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-                                  <Tag size={18} />
-                                  שדות מותאמים
-                                </h4>
-                                <div className="bg-white p-4 rounded-lg space-y-2">
-                                  {customFields.map(field => (
-                                    <div key={field.id} className="flex justify-between">
-                                      <span className="text-gray-600">{field.name}:</span>
-                                      <span className="font-medium">
-                                        {customer.custom_fields?.[field.id] || '-'}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
-
-            {filteredCustomers.length === 0 && (
-              <div className="p-12 text-center">
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-4">
-                  <User size={40} className="text-gray-400" />
-                </div>
-                <h3 className="text-xl font-medium text-gray-700 mb-2">אין לקוחות להצגה</h3>
-                <p className="text-gray-500">
-                  {searchTerm || selectedStatus !== 'all' 
-                    ? 'נסה לשנות את הסינון או החיפוש'
-                    : 'התחל להוסיף לקוחות חדשים למערכת'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b bg-gradient-to-r from-blue-500 to-purple-500 text-white">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-bold">
-                    {editingCustomer ? 'עריכת לקוח' : 'לקוח חדש'}
-                  </h2>
-                  <button
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditingCustomer(null);
-                      setFormData({ 
-                        name: '',
-                        legal_id: '',
-                        contact_name: '',
-                        email: '', 
-                        phone: '',
-                        address: '',
-                        status: 'ליד חדש',
-                        notes: '',
-                        custom_fields: {}
-                      });
-                    }}
-                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                {/* Basic Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleSubmit} style={{ padding: '25px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gap: '20px',
+                  marginBottom: '20px'
+                }}>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      שם החברה/לקוח *
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
+                      שם החברה/לקוח <span style={{ color: '#dc3545' }}>*</span>
                     </label>
                     <input
                       type="text"
+                      required
                       value={formData.name}
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      required
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="הזן שם חברה או לקוח"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       ח.פ / ע.מ
                     </label>
                     <input
                       type="text"
                       value={formData.legal_id}
                       onChange={(e) => setFormData({...formData, legal_id: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="מספר חברה או עוסק מורשה"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       איש קשר
                     </label>
                     <input
                       type="text"
                       value={formData.contact_name}
                       onChange={(e) => setFormData({...formData, contact_name: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="שם איש הקשר"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       טלפון
                     </label>
                     <input
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="מספר טלפון"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       אימייל
                     </label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="כתובת אימייל"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       כתובת
                     </label>
                     <input
                       type="text"
                       value={formData.address}
                       onChange={(e) => setFormData({...formData, address: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                       placeholder="כתובת מלאה"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
                       סטטוס
                     </label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({...formData, status: e.target.value})}
-                      className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        backgroundColor: 'white'
+                      }}
                     >
                       {Object.keys(statusColors).map(status => (
                         <option key={status} value={status}>{status}</option>
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    הערות
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                    rows={3}
-                    className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors resize-none"
-                    placeholder="הערות נוספות..."
-                  />
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '8px', 
+                      color: '#666',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}>
+                      הערות
+                    </label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                      rows={3}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        resize: 'vertical'
+                      }}
+                      placeholder="הערות נוספות..."
+                    />
+                  </div>
                 </div>
 
                 {/* Custom Fields */}
                 {customFields.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-700 mb-4">שדות מותאמים</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div style={{ marginBottom: '20px' }}>
+                    <h3 style={{ 
+                      fontSize: '16px', 
+                      fontWeight: '600',
+                      color: '#333',
+                      marginBottom: '15px'
+                    }}>
+                      שדות מותאמים
+                    </h3>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                      gap: '15px'
+                    }}>
                       {customFields.map(field => (
                         <div key={field.id}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label style={{ 
+                            display: 'block', 
+                            marginBottom: '8px', 
+                            color: '#666',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>
                             {field.name} {field.required && '*'}
                           </label>
                           {field.type === 'select' && field.options ? (
@@ -699,7 +760,14 @@ export default function CustomersPage() {
                                 }
                               })}
                               required={field.required}
-                              className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors bg-white"
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                border: '1px solid #ddd',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                backgroundColor: 'white'
+                              }}
                             >
                               <option value="">בחר...</option>
                               {field.options.map(opt => (
@@ -718,7 +786,13 @@ export default function CustomersPage() {
                                 }
                               })}
                               required={field.required}
-                              className="w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+                              style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                border: '1px solid #ddd',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
                             />
                           )}
                         </div>
@@ -727,12 +801,26 @@ export default function CustomersPage() {
                   </div>
                 )}
 
-                <div className="flex gap-4 pt-4">
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '15px',
+                  paddingTop: '20px',
+                  borderTop: '1px solid #e0e0e0'
+                }}>
                   <button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all font-medium shadow-lg"
+                    style={{
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      padding: '12px 30px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '15px',
+                      fontWeight: '500'
+                    }}
                   >
-                    {editingCustomer ? 'עדכן לקוח' : 'הוסף לקוח'}
+                    💾 {editingCustomer ? 'עדכן לקוח' : 'שמור לקוח'}
                   </button>
                   <button
                     type="button"
@@ -751,7 +839,16 @@ export default function CustomersPage() {
                         custom_fields: {}
                       });
                     }}
-                    className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+                    style={{
+                      backgroundColor: '#e0e0e0',
+                      color: '#333',
+                      padding: '12px 30px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '15px',
+                      fontWeight: '500'
+                    }}
                   >
                     ביטול
                   </button>
@@ -763,36 +860,96 @@ export default function CustomersPage() {
 
         {/* Custom Fields Manager Modal */}
         {showFieldManager && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-              <div className="p-6 border-b bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-bold">ניהול שדות מותאמים</h2>
-                  <button
-                    onClick={() => setShowFieldManager(false)}
-                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{
+                padding: '25px',
+                borderBottom: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#9C27B0',
+                color: 'white',
+                borderRadius: '12px 12px 0 0'
+              }}>
+                <h2 style={{ margin: 0, fontSize: '20px' }}>🏷️ ניהול שדות מותאמים</h2>
+                <button
+                  onClick={() => setShowFieldManager(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '24px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="p-6">
+              <div style={{ padding: '25px' }}>
                 {/* Add New Field */}
-                <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-                  <h3 className="font-medium text-gray-700 mb-4">הוסף שדה חדש</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div style={{
+                  backgroundColor: '#f9f9f9',
+                  padding: '20px',
+                  borderRadius: '8px',
+                  marginBottom: '25px'
+                }}>
+                  <h3 style={{ 
+                    margin: '0 0 15px 0',
+                    fontSize: '16px',
+                    color: '#333'
+                  }}>
+                    הוסף שדה חדש
+                  </h3>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '15px',
+                    marginBottom: '15px'
+                  }}>
                     <input
                       type="text"
                       placeholder="שם השדה"
                       value={newField.name}
                       onChange={(e) => setNewField({...newField, name: e.target.value})}
-                      className="px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-purple-500"
+                      style={{
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
                     />
                     <select
                       value={newField.type}
                       onChange={(e) => setNewField({...newField, type: e.target.value as any})}
-                      className="px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-purple-500 bg-white"
+                      style={{
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        backgroundColor: 'white'
+                      }}
                     >
                       <option value="text">טקסט</option>
                       <option value="number">מספר</option>
@@ -802,7 +959,7 @@ export default function CustomersPage() {
                   </div>
                   
                   {newField.type === 'select' && (
-                    <div className="mt-4">
+                    <div style={{ marginBottom: '15px' }}>
                       <input
                         type="text"
                         placeholder="אפשרויות (מופרדות בפסיקים)"
@@ -810,25 +967,48 @@ export default function CustomersPage() {
                           ...newField, 
                           options: e.target.value.split(',').map(o => o.trim())
                         })}
-                        className="w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:border-purple-500"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #ddd',
+                          borderRadius: '6px',
+                          fontSize: '14px'
+                        }}
                       />
                     </div>
                   )}
                   
-                  <div className="mt-4 flex items-center gap-4">
-                    <label className="flex items-center gap-2">
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between'
+                  }}>
+                    <label style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      cursor: 'pointer'
+                    }}>
                       <input
                         type="checkbox"
                         checked={newField.required}
                         onChange={(e) => setNewField({...newField, required: e.target.checked})}
-                        className="w-4 h-4 text-purple-600"
+                        style={{ width: '16px', height: '16px' }}
                       />
-                      <span className="text-gray-700">שדה חובה</span>
+                      <span style={{ fontSize: '14px', color: '#666' }}>שדה חובה</span>
                     </label>
                     
                     <button
                       onClick={saveCustomField}
-                      className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                      style={{
+                        backgroundColor: '#9C27B0',
+                        color: 'white',
+                        padding: '8px 20px',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
                     >
                       הוסף שדה
                     </button>
@@ -837,27 +1017,72 @@ export default function CustomersPage() {
 
                 {/* Existing Fields */}
                 <div>
-                  <h3 className="font-medium text-gray-700 mb-4">שדות קיימים</h3>
+                  <h3 style={{ 
+                    margin: '0 0 15px 0',
+                    fontSize: '16px',
+                    color: '#333'
+                  }}>
+                    שדות קיימים
+                  </h3>
                   {customFields.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">אין שדות מותאמים</p>
+                    <p style={{ 
+                      textAlign: 'center',
+                      color: '#999',
+                      padding: '30px',
+                      backgroundColor: '#f9f9f9',
+                      borderRadius: '8px'
+                    }}>
+                      אין שדות מותאמים
+                    </p>
                   ) : (
-                    <div className="space-y-2">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {customFields.map(field => (
-                        <div key={field.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div key={field.id} style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 15px',
+                          backgroundColor: '#f9f9f9',
+                          borderRadius: '8px'
+                        }}>
                           <div>
-                            <span className="font-medium text-gray-700">{field.name}</span>
-                            <span className="text-gray-500 text-sm mr-2">({field.type})</span>
+                            <span style={{ fontWeight: '500', color: '#333' }}>{field.name}</span>
+                            <span style={{ 
+                              color: '#666',
+                              fontSize: '12px',
+                              marginRight: '8px'
+                            }}>
+                              ({field.type})
+                            </span>
                             {field.required && (
-                              <span className="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded mr-2">
+                              <span style={{
+                                fontSize: '11px',
+                                backgroundColor: '#9C27B0',
+                                color: 'white',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                marginRight: '8px'
+                              }}>
                                 חובה
                               </span>
                             )}
                           </div>
                           <button
                             onClick={() => deleteCustomField(field.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            style={{
+                              backgroundColor: '#f44336',
+                              color: 'white',
+                              border: 'none',
+                              width: '30px',
+                              height: '30px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
                           >
-                            <Trash2 size={18} />
+                            🗑️
                           </button>
                         </div>
                       ))}
@@ -868,6 +1093,359 @@ export default function CustomersPage() {
             </div>
           </div>
         )}
+
+        {/* Customers Table */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    שם החברה
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    ח.פ/ע.מ
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    איש קשר
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    טלפון
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    אימייל
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    סטטוס
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'right',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    תאריך יצירה
+                  </th>
+                  <th style={{ 
+                    padding: '15px',
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    color: '#666',
+                    fontSize: '14px',
+                    borderBottom: '2px solid #e0e0e0'
+                  }}>
+                    פעולות
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCustomers.map((customer) => (
+                  <React.Fragment key={customer.id}>
+                    <tr 
+                      style={{ 
+                        borderBottom: '1px solid #e0e0e0',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f9f9f9'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }}
+                      onClick={() => toggleRowExpansion(customer.id)}
+                    >
+                      <td style={{ padding: '15px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '35px',
+                            height: '35px',
+                            backgroundColor: '#4CAF50',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            fontSize: '14px'
+                          }}>
+                            {customer.name?.charAt(0)}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '500', color: '#333' }}>
+                              {customer.name}
+                            </div>
+                            {customer.address && (
+                              <div style={{ 
+                                fontSize: '12px',
+                                color: '#999',
+                                marginTop: '2px'
+                              }}>
+                                📍 {customer.address}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '15px', color: '#666', fontSize: '14px' }}>
+                        {customer.legal_id || '-'}
+                      </td>
+                      <td style={{ padding: '15px', color: '#666', fontSize: '14px' }}>
+                        {customer.contact_name || '-'}
+                      </td>
+                      <td style={{ padding: '15px', color: '#666', fontSize: '14px' }}>
+                        {customer.phone || '-'}
+                      </td>
+                      <td style={{ padding: '15px', color: '#666', fontSize: '14px' }}>
+                        {customer.email || '-'}
+                      </td>
+                      <td style={{ padding: '15px' }}>
+                        {customer.status && (
+                          <span style={{
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: '500',
+                            backgroundColor: statusColors[customer.status]?.bg || '#e0e0e0',
+                            color: statusColors[customer.status]?.text || '#666',
+                            border: `1px solid ${statusColors[customer.status]?.border || '#ccc'}`
+                          }}>
+                            {customer.status}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '15px', color: '#666', fontSize: '14px' }}>
+                        {new Date(customer.created_at).toLocaleDateString('he-IL')}
+                      </td>
+                      <td style={{ padding: '15px' }}>
+                        <div style={{ 
+                          display: 'flex',
+                          gap: '8px',
+                          justifyContent: 'center'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => handleEdit(customer)}
+                            style={{
+                              backgroundColor: '#2196F3',
+                              color: 'white',
+                              border: 'none',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="ערוך"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDelete(customer.id)}
+                            style={{
+                              backgroundColor: '#f44336',
+                              color: 'white',
+                              border: 'none',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="מחק"
+                          >
+                            🗑️
+                          </button>
+                          <button
+                            style={{
+                              backgroundColor: '#9E9E9E',
+                              color: 'white',
+                              border: 'none',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title={expandedRows.has(customer.id) ? 'סגור' : 'הרחב'}
+                          >
+                            {expandedRows.has(customer.id) ? '⬆️' : '⬇️'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    {/* Expanded Row */}
+                    {expandedRows.has(customer.id) && (
+                      <tr>
+                        <td colSpan={8} style={{
+                          padding: '20px',
+                          backgroundColor: '#f9f9f9',
+                          borderBottom: '1px solid #e0e0e0'
+                        }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                            gap: '20px'
+                          }}>
+                            {customer.notes && (
+                              <div>
+                                <h4 style={{
+                                  margin: '0 0 10px 0',
+                                  fontSize: '14px',
+                                  fontWeight: '600',
+                                  color: '#666',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}>
+                                  📝 הערות
+                                </h4>
+                                <div style={{
+                                  backgroundColor: 'white',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #e0e0e0',
+                                  fontSize: '14px',
+                                  color: '#666'
+                                }}>
+                                  {customer.notes}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {customFields.length > 0 && (
+                              <div>
+                                <h4 style={{
+                                  margin: '0 0 10px 0',
+                                  fontSize: '14px',
+                                  fontWeight: '600',
+                                  color: '#666',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}>
+                                  🏷️ שדות מותאמים
+                                </h4>
+                                <div style={{
+                                  backgroundColor: 'white',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #e0e0e0'
+                                }}>
+                                  {customFields.map(field => (
+                                    <div key={field.id} style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      padding: '5px 0',
+                                      borderBottom: '1px solid #f0f0f0'
+                                    }}>
+                                      <span style={{ color: '#666', fontSize: '14px' }}>
+                                        {field.name}:
+                                      </span>
+                                      <span style={{ fontWeight: '500', fontSize: '14px' }}>
+                                        {customer.custom_fields?.[field.id] || '-'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Empty State */}
+            {filteredCustomers.length === 0 && (
+              <div style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                backgroundColor: 'white'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '20px' }}>👥</div>
+                <h3 style={{ 
+                  color: '#333',
+                  marginBottom: '10px',
+                  fontSize: '18px'
+                }}>
+                  אין לקוחות להצגה
+                </h3>
+                <p style={{ 
+                  color: '#666',
+                  fontSize: '14px'
+                }}>
+                  {searchTerm || selectedStatus !== 'all' 
+                    ? 'נסה לשנות את הסינון או החיפוש'
+                    : 'התחל להוסיף לקוחות חדשים למערכת'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import ProductCategoryTabs from '@/components/ProductCategoryTabs';
 
 interface Category {
   id: string;
@@ -415,6 +416,8 @@ export default function CategoriesPage() {
           </div>
         </div>
       </div>
+
+      <ProductCategoryTabs />
 
       {/* Statistics Cards */}
       <div style={{

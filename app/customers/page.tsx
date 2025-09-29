@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import NewCustomerForm from '@/app/components/NewCustomerForm';
 
 // Create a singleton instance of Supabase client
 let supabaseInstance: any = null;
@@ -27,6 +28,9 @@ interface Customer {
   email: string;
   phone: string;
   address?: string;
+  legal_id?: string;
+  contact_name?: string;
+  notes?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -41,75 +45,64 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [userOrgId, setUserOrgId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
-  });
 
   useEffect(() => {
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      router.push('/login');
-      return;
-    }
-    
-    // Get user's org_id from the users table
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('id', session.user.id)
-      .single();
-    
-    if (userError || !userData?.org_id) {
-      console.error('Error getting user org_id:', userError);
-      setError('שגיאה בטעינת נתוני המשתמש');
-      setLoading(false);
-      return;
-    }
-    
-    setUserOrgId(userData.org_id);
-    loadCustomers(userData.org_id);
-  };
-
-  const loadCustomers = async (orgId: string) => {
-    setLoading(true);
-    setError(null);
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading customers:', error);
-        setError(`שגיאה בטעינת לקוחות: ${error.message}`);
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
         return;
       }
-      
-      setCustomers(data || []);
-    } catch (error: any) {
-      console.error('Error loading customers:', error);
-      setError(`שגיאה בטעינת לקוחות: ${error?.message || 'שגיאה לא ידועה'}`);
+
+      await loadCustomers();
+
+    } catch (error) {
+      console.error('Auth check error:', error);
+      setError('שגיאה בבדיקת הרשאות');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddCustomer = async () => {
-    setError(null);
-    
-    // Validation
-    if (!formData.name || !formData.email || !formData.phone) {
-      setError('יש למלא את כל השדות החובה (שם, אימייל, טלפון)');
-      return;
+  const loadCustomers = async () => {
+    try {
+      console.log('Loading all customers');
+
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error loading customers:', error);
+        if (error.code !== 'PGRST116') {
+          setError(`שגיאה בטעינת לקוחות: ${error.message}`);
+        }
+        return;
+      }
+
+      console.log('Customers loaded:', data);
+      setCustomers(data || []);
+
+      if (data && data.length > 0 && data[0].org_id) {
+        setUserOrgId(data[0].org_id);
+        console.log('Set org_id from first customer:', data[0].org_id);
+      } else {
+        console.warn('No customers found or no org_id');
+      }
+
+    } catch (error) {
+      console.error('Error:', error);
     }
+  };
+
+  const handleAddCustomer = async (customerData: any) => {
+    setError(null);
 
     if (!userOrgId) {
       setError('שגיאה: לא נמצא מזהה ארגון');
@@ -121,10 +114,7 @@ export default function CustomersPage() {
         .from('customers')
         .insert([{
           org_id: userOrgId,
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address || null
+          ...customerData
         }])
         .select();
 
@@ -136,8 +126,7 @@ export default function CustomersPage() {
 
       console.log('Customer added successfully:', data);
       setShowAddModal(false);
-      resetForm();
-      await loadCustomers(userOrgId);
+      await loadCustomers();
       alert('הלקוח נוסף בהצלחה!');
     } catch (error: any) {
       console.error('Error adding customer:', error);
@@ -145,49 +134,30 @@ export default function CustomersPage() {
     }
   };
 
-  const handleEditCustomer = async () => {
+  const handleEditCustomer = async (customerData: any) => {
     if (!selectedCustomer) return;
-    
+
     setError(null);
-    
-    // Validation
-    if (!formData.name || !formData.email || !formData.phone) {
-      setError('יש למלא את כל השדות החובה (שם, אימייל, טלפון)');
-      return;
-    }
 
     try {
-      const updateData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address || null
-      };
-
-      console.log('Updating customer:', selectedCustomer.id, updateData);
+      console.log('Updating customer:', selectedCustomer.id, customerData);
 
       const { data, error } = await supabase
         .from('customers')
-        .update(updateData)
+        .update(customerData)
         .eq('id', selectedCustomer.id)
         .select();
 
       if (error) {
         console.error('Error updating customer:', error);
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
         setError(`שגיאה בעדכון לקוח: ${error.message}`);
         return;
       }
 
       console.log('Customer updated successfully:', data);
       setShowEditModal(false);
-      resetForm();
-      await loadCustomers(userOrgId!);
+      setSelectedCustomer(null);
+      await loadCustomers();
       alert('הלקוח עודכן בהצלחה!');
     } catch (error: any) {
       console.error('Error updating customer:', error);
@@ -210,8 +180,8 @@ export default function CustomersPage() {
         setError(`שגיאה במחיקת לקוח: ${error.message}`);
         return;
       }
-      
-      await loadCustomers(userOrgId!);
+
+      await loadCustomers();
       alert('הלקוח נמחק בהצלחה!');
     } catch (error: any) {
       console.error('Error deleting customer:', error);
@@ -219,25 +189,8 @@ export default function CustomersPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      address: ''
-    });
-    setSelectedCustomer(null);
-    setError(null);
-  };
-
   const openEditModal = (customer: Customer) => {
     setSelectedCustomer(customer);
-    setFormData({
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone,
-      address: customer.address || ''
-    });
     setError(null);
     setShowEditModal(true);
   };
@@ -250,10 +203,10 @@ export default function CustomersPage() {
 
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         minHeight: '100vh',
         backgroundColor: '#f5f5f5'
       }}>
@@ -282,20 +235,20 @@ export default function CustomersPage() {
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
+    <div style={{
+      minHeight: '100vh',
       backgroundColor: '#f5f5f5',
       direction: 'rtl'
     }}>
       {/* Header */}
-      <header style={{ 
-        backgroundColor: 'white', 
+      <header style={{
+        backgroundColor: 'white',
         padding: '20px',
         borderBottom: '1px solid #e0e0e0',
         marginBottom: '30px'
       }}>
-        <div style={{ 
-          maxWidth: '1200px', 
+        <div style={{
+          maxWidth: '1200px',
           margin: '0 auto',
           display: 'flex',
           justifyContent: 'space-between',
@@ -336,7 +289,7 @@ export default function CustomersPage() {
       {/* Main Content */}
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
         {/* Search and Add */}
-        <div style={{ 
+        <div style={{
           backgroundColor: 'white',
           padding: '20px',
           borderRadius: '8px',
@@ -423,7 +376,7 @@ export default function CustomersPage() {
         </div>
 
         {/* Customers Table */}
-        <div style={{ 
+        <div style={{
           backgroundColor: 'white',
           borderRadius: '8px',
           overflow: 'hidden',
@@ -443,12 +396,12 @@ export default function CustomersPage() {
             <tbody>
               {filteredCustomers.map((customer) => (
                 <React.Fragment key={customer.id}>
-                  <tr style={{ 
+                  <tr style={{
                     borderBottom: '1px solid #e0e0e0',
                     transition: 'background-color 0.2s'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <td style={{ padding: '15px', fontWeight: '500' }}>{customer.name}</td>
                     <td style={{ padding: '15px' }}>{customer.email}</td>
@@ -495,8 +448,8 @@ export default function CustomersPage() {
           </table>
 
           {filteredCustomers.length === 0 && (
-            <div style={{ 
-              padding: '60px 40px', 
+            <div style={{
+              padding: '60px 40px',
               textAlign: 'center',
               color: '#666'
             }}>
@@ -525,8 +478,8 @@ export default function CustomersPage() {
         </div>
       </main>
 
-      {/* Add/Edit Modal */}
-      {(showAddModal || showEditModal) && (
+      {/* Add Modal */}
+      {showAddModal && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -537,149 +490,57 @@ export default function CustomersPage() {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          overflow: 'auto',
+          padding: '20px'
         }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '10px',
-            width: '500px',
-            maxWidth: '90%',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <h2 style={{ marginBottom: '20px' }}>
-              {showAddModal ? 'הוסף לקוח חדש' : 'ערוך לקוח'}
-            </h2>
-            
-            {error && (
-              <div style={{
-                padding: '10px',
-                marginBottom: '20px',
-                backgroundColor: '#f8d7da',
-                color: '#721c24',
-                borderRadius: '5px',
-                border: '1px solid #f5c6cb'
-              }}>
-                {error}
-              </div>
-            )}
-            
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                שם *
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '16px'
-                }}
-                placeholder="הכנס שם לקוח"
-              />
-            </div>
+          <div style={{ maxWidth: '600px', width: '100%' }}>
+            <NewCustomerForm
+              onSubmit={handleAddCustomer}
+              onCancel={() => {
+                setShowAddModal(false);
+                setError(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                אימייל *
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '16px'
-                }}
-                placeholder="example@email.com"
-              />
-            </div>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                טלפון *
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '16px'
-                }}
-                placeholder="050-1234567"
-              />
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                כתובת
-              </label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '16px'
-                }}
-                placeholder="רחוב ומספר"
-              />
-            </div>
-
-            <div style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
-              * שדות חובה
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <button
-                onClick={showAddModal ? handleAddCustomer : handleEditCustomer}
-                style={{
-                  padding: '12px 30px',
-                  backgroundColor: showAddModal ? '#28a745' : '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  fontWeight: 'bold'
-                }}
-              >
-                {showAddModal ? 'הוסף' : 'עדכן'}
-              </button>
-              <button
-                onClick={() => {
-                  if (showAddModal) setShowAddModal(false);
-                  if (showEditModal) setShowEditModal(false);
-                  resetForm();
-                }}
-                style={{
-                  padding: '12px 30px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
-              >
-                ביטול
-              </button>
-            </div>
+      {/* Edit Modal */}
+      {showEditModal && selectedCustomer && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          overflow: 'auto',
+          padding: '20px'
+        }}>
+          <div style={{ maxWidth: '600px', width: '100%' }}>
+            <NewCustomerForm
+              initialData={{
+                name: selectedCustomer.name,
+                email: selectedCustomer.email || '',
+                phone: selectedCustomer.phone,
+                legal_id: selectedCustomer.legal_id || '',
+                contact_name: selectedCustomer.contact_name || '',
+                address: selectedCustomer.address || '',
+                notes: selectedCustomer.notes || ''
+              }}
+              onSubmit={handleEditCustomer}
+              onCancel={() => {
+                setShowEditModal(false);
+                setSelectedCustomer(null);
+                setError(null);
+              }}
+              isEdit={true}
+            />
           </div>
         </div>
       )}

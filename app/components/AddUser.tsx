@@ -23,7 +23,7 @@ export default function AddUser({ onSuccess }: AddUserProps) {
     setMessage(null)
 
     try {
-      // 1. צור משתמש ב-Auth
+      // 1. צור משתמש ב-Aut
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,

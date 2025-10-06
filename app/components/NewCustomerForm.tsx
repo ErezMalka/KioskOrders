@@ -5,6 +5,7 @@ interface NewCustomerFormProps {
   onCancel: () => void
   initialData?: CustomerFormData
   isEdit?: boolean
+  allowCustomFields?: boolean
 }
 
 interface CustomerFormData {
@@ -15,6 +16,7 @@ interface CustomerFormData {
   contact_name: string
   address: string
   notes: string
+  [key: string]: any
 }
 
 interface CustomField {
@@ -23,7 +25,13 @@ interface CustomField {
   value: string
 }
 
-export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdit = false }: NewCustomerFormProps) {
+export default function NewCustomerForm({ 
+  onSubmit, 
+  onCancel, 
+  initialData, 
+  isEdit = false,
+  allowCustomFields = false
+}: NewCustomerFormProps) {
   const [formData, setFormData] = useState<CustomerFormData>(
     initialData || {
       name: '',
@@ -39,12 +47,44 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
   const [customFields, setCustomFields] = useState<CustomField[]>([])
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
 
-  // עדכון הטופס אם initialData משתנה
   useEffect(() => {
     if (initialData) {
       setFormData(initialData)
+      
+      // טעינת שדות מותאמים אישית בעת עריכה
+      if (allowCustomFields) {
+        const loadedCustomFields: CustomField[] = []
+        
+        // אם יש custom_fields כאובייקט נפרד
+        if (initialData.custom_fields && typeof initialData.custom_fields === 'object') {
+          Object.entries(initialData.custom_fields).forEach(([key, fieldData]: [string, any]) => {
+            loadedCustomFields.push({
+              id: key,
+              label: fieldData.label || '',
+              value: fieldData.value || ''
+            })
+          })
+        } 
+        // או אם השדות המותאמים נשמרו ישירות על האובייקט
+        else {
+          Object.keys(initialData).forEach(key => {
+            if (key.startsWith('custom_')) {
+              const fieldValue = initialData[key]
+              if (typeof fieldValue === 'object' && fieldValue.label) {
+                loadedCustomFields.push({
+                  id: key,
+                  label: fieldValue.label,
+                  value: fieldValue.value || ''
+                })
+              }
+            }
+          })
+        }
+        
+        setCustomFields(loadedCustomFields)
+      }
     }
-  }, [initialData])
+  }, [initialData, allowCustomFields])
 
   const addCustomField = () => {
     const newField: CustomField = {
@@ -94,7 +134,6 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
     e.preventDefault()
     
     if (validateForm()) {
-      // הפרדה בין שדות רגילים לשדות מותאמים
       const standardFields = {
         name: formData.name,
         phone: formData.phone,
@@ -105,18 +144,19 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
         notes: formData.notes
       }
 
-      // יצירת אובייקט של שדות מותאמים
+      // רק אם allowCustomFields = true ויש שדות מותאמים
       const customFieldsData: { [key: string]: { label: string; value: string } } = {}
-      customFields.forEach(field => {
-        if (field.label.trim()) {
-          customFieldsData[field.id] = {
-            label: field.label,
-            value: field.value
+      if (allowCustomFields) {
+        customFields.forEach(field => {
+          if (field.label.trim()) {
+            customFieldsData[field.id] = {
+              label: field.label,
+              value: field.value
+            }
           }
-        }
-      })
+        })
+      }
 
-      // שליחת הנתונים עם custom_fields נפרד
       const finalData = {
         ...standardFields,
         custom_fields: Object.keys(customFieldsData).length > 0 ? customFieldsData : null
@@ -128,7 +168,6 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
 
   const handleInputChange = (field: keyof CustomerFormData, value: string) => {
     setFormData({ ...formData, [field]: value })
-    // מנקה שגיאות בזמן הקלדה
     if (errors[field]) {
       setErrors({ ...errors, [field]: '' })
     }
@@ -147,7 +186,7 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
         color: '#333',
         fontWeight: '600'
       }}>
-        פרטי לקוח חדש
+        {isEdit ? 'עריכת פרטי לקוח' : 'פרטי לקוח חדש'}
       </h3>
       
       <form onSubmit={handleSubmit}>
@@ -411,8 +450,8 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
             />
           </div>
 
-          {/* שדות מותאמים אישית */}
-          {customFields.map((field) => (
+          {/* שדות מותאמים אישית - רק אם allowCustomFields = true */}
+          {allowCustomFields && customFields.map((field) => (
             <div key={field.id} style={{ gridColumn: 'span 2' }}>
               <div style={{ 
                 display: 'grid', 
@@ -491,38 +530,40 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
             </div>
           ))}
 
-          {/* כפתור הוספת שדה */}
-          <div style={{ gridColumn: 'span 2' }}>
-            <button
-              type="button"
-              onClick={addCustomField}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#2196F3',
-                color: 'white',
-                border: '2px dashed #2196F3',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1976D2'
-                e.currentTarget.style.borderColor = '#1976D2'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#2196F3'
-                e.currentTarget.style.borderColor = '#2196F3'
-              }}
-            >
-              <span style={{ fontSize: '18px' }}>+</span>
-              הוסף שדה מותאם אישית
-            </button>
-          </div>
+          {/* כפתור הוספת שדה - רק אם allowCustomFields = true */}
+          {allowCustomFields && (
+            <div style={{ gridColumn: 'span 2' }}>
+              <button
+                type="button"
+                onClick={addCustomField}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#2196F3',
+                  color: 'white',
+                  border: '2px dashed #2196F3',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.3s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#1976D2'
+                  e.currentTarget.style.borderColor = '#1976D2'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#2196F3'
+                  e.currentTarget.style.borderColor = '#2196F3'
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>+</span>
+                הוסף שדה מותאם אישית
+              </button>
+            </div>
+          )}
         </div>
 
         {/* כפתורים */}
@@ -552,7 +593,7 @@ export default function NewCustomerForm({ onSubmit, onCancel, initialData, isEdi
               e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
             }}
           >
-            ✓ צור לקוח
+            {isEdit ? '✓ עדכן לקוח' : '✓ צור לקוח'}
           </button>
           <button
             type="button"

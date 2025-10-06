@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { ChevronRight, ChevronLeft, Check, ShoppingCart, User, CreditCard, FileText } from 'lucide-react';
@@ -34,6 +34,202 @@ interface CartItem {
   selectedOptions?: any[];
 }
 
+/** ---------- קומבו-בוקס חיפוש ללקוחות (ללא ספריות) ---------- */
+function CustomerCombo({
+
+  customers,
+  selectedCustomerId,
+  onSelect,
+  placeholder = 'הקלד שם, טלפון, אימייל או עוסק...',
+}: {
+  customers: Customer[];
+  selectedCustomerId: string;
+  onSelect: (id: string) => void;
+  placeholder?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const selected = useMemo(
+    () => customers.find((c) => c.id === selectedCustomerId) || null,
+    [customers, selectedCustomerId]
+  );
+
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState<string>(selected ? selected.name : '');
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // סגירת הרשימה בלחיצה מחוץ
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // סינון לקוחות לפי כמה שדות
+  const filtered = useMemo(() => {
+    const q = (query || '').toLowerCase().trim();
+    if (!q) return customers.slice(0, 200); // הגבלה סבירה להצגה
+    return customers.filter((c) => {
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.legal_id || '').toLowerCase().includes(q) ||
+        (c.contact_name || '').toLowerCase().includes(q) ||
+        (c.address || '').toLowerCase().includes(q)
+      );
+    }).slice(0, 200);
+  }, [customers, query]);
+
+  // עדכון ה-query כאשר מתעדכן הלקוח הנבחר מבחוץ
+  useEffect(() => {
+    if (selected && !open) {
+      setQuery(selected.name);
+    }
+  }, [selected, open]);
+
+  // ניווט מקלדת
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+      setOpen(true);
+      setActiveIndex(0);
+      return;
+    }
+    if (!open) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      listRef.current?.scrollTo({ top: (Math.min(activeIndex + 1, filtered.length - 1)) * 48 });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+      listRef.current?.scrollTo({ top: Math.max(activeIndex - 1, 0) * 48 });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const pick = filtered[activeIndex];
+      if (pick) {
+        onSelect(pick.id);
+        setQuery(pick.name);
+        setOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', direction: 'rtl' }}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+          setActiveIndex(0);
+        }}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls="customer-combo-listbox"
+        style={{
+          width: '97.5%',
+          padding: '12px',
+          fontSize: '16px',
+          borderRadius: '8px',
+          border: '2px solid #2196F3',
+          outline: 'none',
+          textAlign: 'right',
+          background: 'white'
+        }}
+      />
+      {open && (
+        <div
+          ref={listRef}
+          id="customer-combo-listbox"
+          role="listbox"
+          style={{
+            position: 'absolute',
+            zIndex: 10,
+            top: 'calc(100% + 6px)',
+            insetInlineStart: 0,
+            insetInlineEnd: 0,
+            maxHeight: 320,
+            overflowY: 'auto',
+            background: 'white',
+            border: '1px solid #e0e0e0',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+            padding: 6,
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div
+              style={{
+                padding: '10px 12px',
+                color: '#666',
+                fontSize: 14,
+                textAlign: 'center',
+              }}
+            >
+              לא נמצאו לקוחות תואמים
+            </div>
+          ) : (
+            filtered.map((c, i) => {
+              const active = i === activeIndex;
+              return (
+                <div
+                  key={c.id}
+                  role="option"
+                  aria-selected={active}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onMouseDown={(e) => {
+                    // כדי לא לאבד focus לפני ה-click
+                    e.preventDefault();
+                  }}
+                  onClick={() => {
+                    onSelect(c.id);
+                    setQuery(c.name);
+                    setOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    background: active ? '#e3f2fd' : 'transparent',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: '#222' }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    {c.phone}
+                    {c.email ? ` · ${c.email}` : ''}
+                    {c.legal_id ? ` · ע.מ: ${c.legal_id}` : ''}
+                    {c.address ? ` · ${c.address}` : ''}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** ----------------------- עמוד יצירת הזמנה ----------------------- */
 export default function CreateOrderPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
@@ -81,10 +277,8 @@ export default function CreateOrderPage() {
         router.push('/login');
         return;
       }
-
       await loadCustomers();
       await loadProducts();
-
     } catch (error) {
       console.error('Auth check error:', error);
       setError('שגיאה בבדיקת הרשאות');
@@ -93,8 +287,6 @@ export default function CreateOrderPage() {
 
   const loadCustomers = async () => {
     try {
-      console.log('Loading all customers');
-
       const { data, error } = await supabase
         .from('customers')
         .select('*')
@@ -102,22 +294,16 @@ export default function CreateOrderPage() {
 
       if (error) {
         console.error('Error loading customers:', error);
-        if (error.code !== 'PGRST116') {
+        if ((error as any).code !== 'PGRST116') {
           setError(`שגיאה בטעינת לקוחות: ${error.message}`);
         }
         return;
       }
 
-      console.log('Customers loaded:', data);
       setCustomers(data || []);
-
       if (data && data.length > 0 && data[0].org_id) {
         setUserOrgId(data[0].org_id);
-        console.log('Set org_id from first customer:', data[0].org_id);
-      } else {
-        console.warn('No customers found or no org_id');
       }
-
     } catch (error) {
       console.error('Error:', error);
     }
@@ -125,8 +311,6 @@ export default function CreateOrderPage() {
 
   const loadProducts = async () => {
     try {
-      console.log('Loading products');
-
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -136,10 +320,7 @@ export default function CreateOrderPage() {
         console.error('Error loading products:', error);
         return;
       }
-
-      console.log('Products loaded:', data);
       setProducts(data || []);
-
     } catch (error) {
       console.error('Error loading products:', error);
     }
@@ -169,21 +350,15 @@ export default function CreateOrderPage() {
       }
 
       let nextNumber = 1;
-
       if (data && data.length > 0 && data[0].order_number) {
         const lastOrderNumber = data[0].order_number;
         const match = lastOrderNumber.match(/(\d+)$/);
-
-        if (match) {
-          nextNumber = parseInt(match[1]) + 1;
-        }
+        if (match) nextNumber = parseInt(match[1]) + 1;
       }
 
       const year = new Date().getFullYear();
       const paddedNumber = String(nextNumber).padStart(5, '0');
-
       return `ORD-${year}-${paddedNumber}`;
-
     } catch (error) {
       console.error('Error generating order number:', error);
       return `ORD-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
@@ -205,8 +380,6 @@ export default function CreateOrderPage() {
     }
 
     try {
-      console.log('Creating customer with org_id:', userOrgId);
-
       const customerData = {
         name: newCustomer.name.trim(),
         email: newCustomer.email.trim() || null,
@@ -217,8 +390,6 @@ export default function CreateOrderPage() {
         notes: newCustomer.notes.trim() || null,
         org_id: userOrgId
       };
-
-      console.log('Customer data:', customerData);
 
       const { data, error } = await supabase
         .from('customers')
@@ -232,10 +403,8 @@ export default function CreateOrderPage() {
         return;
       }
 
-      console.log('Customer created:', data);
-
-      setCustomers([...customers, data]);
-      setSelectedCustomer(data.id);
+      setCustomers((prev) => [...prev, data as Customer]);
+      setSelectedCustomer((data as Customer).id);
       setShowNewCustomer(false);
       setNewCustomer({
         name: '',
@@ -248,7 +417,6 @@ export default function CreateOrderPage() {
       });
 
       alert('הלקוח נוצר בהצלחה!');
-
     } catch (error) {
       console.error('Error:', error);
       setError('שגיאה ביצירת לקוח');
@@ -257,7 +425,6 @@ export default function CreateOrderPage() {
 
   const addToCart = (product: Product) => {
     const existingItem = cartItems.find(item => item.product.id === product.id);
-
     let newCart: CartItem[];
     if (existingItem) {
       newCart = cartItems.map(item =>
@@ -268,7 +435,6 @@ export default function CreateOrderPage() {
     } else {
       newCart = [...cartItems, { product, quantity: 1, discount: 0, selectedOptions: [] }];
     }
-
     setCartItems(newCart);
     saveCartToStorage(newCart);
   };
@@ -296,8 +462,9 @@ export default function CreateOrderPage() {
 
   const calculateTotal = () => {
     return cartItems.reduce((total, item) => {
-      const itemTotal = (item.product.base_price +
-        (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
+      const itemTotal =
+        (item.product.base_price +
+          (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
         item.quantity *
         (1 - (item.discount || 0) / 100);
       return total + itemTotal;
@@ -306,20 +473,16 @@ export default function CreateOrderPage() {
 
   const canProceedToNextStep = () => {
     switch (currentStep) {
-      case 1:
-        return selectedCustomer !== '';
-      case 2:
-        return cartItems.length > 0;
-      case 3:
-        return paymentInfo.paymentMethod !== '';
-      default:
-        return true;
+      case 1: return selectedCustomer !== '';
+      case 2: return cartItems.length > 0;
+      case 3: return paymentInfo.paymentMethod !== '';
+      default: return true;
     }
   };
 
   const handleNextStep = () => {
     if (canProceedToNextStep()) {
-      setCurrentStep(currentStep + 1);
+      setCurrentStep((s) => s + 1);
       setError(null);
     } else {
       if (currentStep === 1) setError('נא לבחור לקוח או ליצור לקוח חדש');
@@ -329,7 +492,7 @@ export default function CreateOrderPage() {
   };
 
   const handlePrevStep = () => {
-    setCurrentStep(currentStep - 1);
+    setCurrentStep((s) => s - 1);
     setError(null);
   };
 
@@ -342,7 +505,6 @@ export default function CreateOrderPage() {
     setLoading(true);
     try {
       const orderNumber = await generateOrderNumber();
-      console.log('Generated order number:', orderNumber);
 
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -365,16 +527,15 @@ export default function CreateOrderPage() {
         return;
       }
 
-      console.log('Order created successfully:', order);
-
       const orderLines = cartItems.map(item => ({
-        order_id: order.id,
+        order_id: (order as any).id,
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.product.base_price,
         discount: item.discount,
-        total_price: (item.product.base_price +
-          (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
+        total_price:
+          (item.product.base_price +
+            (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
           item.quantity *
           (1 - (item.discount || 0) / 100)
       }));
@@ -392,7 +553,6 @@ export default function CreateOrderPage() {
       sessionStorage.removeItem('orderCart');
       alert(`ההזמנה נוצרה בהצלחה!\nמספר הזמנה: ${orderNumber}`);
       router.push('/dashboard');
-
     } catch (error) {
       console.error('Unexpected error:', error);
       alert('שגיאה ביצירת ההזמנה');
@@ -405,7 +565,7 @@ export default function CreateOrderPage() {
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'Arial, sans-serif', direction: 'rtl' }}>
       <h1 style={{ textAlign: 'center', marginBottom: '40px', color: '#333' }}>יצירת הזמנה חדשה</h1>
 
-      {/* Progress Bar (reworked: circle — connector — circle) */}
+      {/* Progress Bar */}
       <div style={{ marginBottom: '40px' }}>
         <div
           style={{
@@ -422,19 +582,9 @@ export default function CreateOrderPage() {
             const isCurrent = currentStep === step.number;
 
             return (
-              <div
-                key={step.number}
-                style={{ display: 'contents' }} // מאפשר לשלב "עיגול" ואז "מחבר" בלי עטיפה מיותרת
-              >
+              <div key={step.number} style={{ display: 'contents' }}>
                 {/* Circle */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    minWidth: 0,
-                  }}
-                >
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
                   <div
                     style={{
                       width: '60px',
@@ -466,16 +616,14 @@ export default function CreateOrderPage() {
                   </div>
                 </div>
 
-                {/* Connector (only between circles) */}
+                {/* Connector */}
                 {i < steps.length - 1 && (
                   <div
                     style={{
                       flex: 1,
                       height: '3px',
                       borderRadius: '2px',
-                      backgroundColor:
-                        // אם עברנו את העיגול הנוכחי -> הצבע ירוק, אחרת אפור
-                        currentStep - 1 > i ? '#4CAF50' : '#e0e0e0',
+                      backgroundColor: currentStep - 1 > i ? '#4CAF50' : '#e0e0e0',
                     }}
                   />
                 )}
@@ -487,7 +635,6 @@ export default function CreateOrderPage() {
 
       {/* Step Content */}
       <div style={{ backgroundColor: '#f9f9f9', padding: '30px', borderRadius: '12px', minHeight: '400px', marginBottom: '30px' }}>
-
         {/* Step 1: Customer Selection */}
         {currentStep === 1 && (
           <div>
@@ -495,38 +642,32 @@ export default function CreateOrderPage() {
 
             {!showNewCustomer && (
               <div>
-                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>בחר לקוח קיים:</label>
-                <select
-                  value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    fontSize: '16px',
-                    borderRadius: '8px',
-                    border: '2px solid #ddd',
-                    marginBottom: '20px'
-                  }}
-                >
-                  <option value="">-- בחר לקוח --</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name} - {customer.phone}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                    חיפוש ובחירת לקוח:
+                  </label>
+
+                  {/* קומבו-בוקס */}
+                  <CustomerCombo
+                    customers={customers}
+                    selectedCustomerId={selectedCustomer}
+                    onSelect={(id) => setSelectedCustomer(id)}
+                  />
+                </div>
 
                 {selectedCustomer && (
-                  <div style={{
-                    padding: '15px',
-                    backgroundColor: '#e3f2fd',
-                    borderRadius: '8px',
-                    marginBottom: '20px',
-                    border: '1px solid #2196F3'
-                  }}>
+                  <div
+                    style={{
+                      padding: '15px',
+                      backgroundColor: '#e3f2fd',
+                      borderRadius: '8px',
+                      marginBottom: '20px',
+                      border: '1px solid #2196F3',
+                    }}
+                  >
                     <h3 style={{ marginBottom: '10px' }}>פרטי הלקוח הנבחר:</h3>
                     {(() => {
-                      const customer = customers.find(c => c.id === selectedCustomer);
+                      const customer = customers.find((c) => c.id === selectedCustomer);
                       return customer ? (
                         <div>
                           <p><strong>שם:</strong> {customer.name}</p>
@@ -549,7 +690,7 @@ export default function CreateOrderPage() {
                     borderRadius: '8px',
                     cursor: 'pointer',
                     fontSize: '16px',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
                   }}
                 >
                   + יצירת לקוח חדש
@@ -568,10 +709,7 @@ export default function CreateOrderPage() {
                   try {
                     const { data, error } = await supabase
                       .from('customers')
-                      .insert([{
-                        ...customerData,
-                        org_id: userOrgId
-                      }])
+                      .insert([{ ...customerData, org_id: userOrgId }])
                       .select()
                       .single();
 
@@ -581,8 +719,8 @@ export default function CreateOrderPage() {
                       return;
                     }
 
-                    setCustomers([...customers, data]);
-                    setSelectedCustomer(data.id);
+                    setCustomers((prev) => [...prev, data as Customer]);
+                    setSelectedCustomer((data as Customer).id);
                     setShowNewCustomer(false);
                     alert('הלקוח נוצר בהצלחה!');
                   } catch (error) {
@@ -604,22 +742,48 @@ export default function CreateOrderPage() {
             {products.length === 0 ? (
               <p>אין מוצרים זמינים. נא להוסיף מוצרים למערכת.</p>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-                {products.map(product => (
-                  <div key={product.id} style={{
-                    padding: '20px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    border: '2px solid #e0e0e0',
-                    transition: 'all 0.3s',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                  gap: '20px',
+                  marginBottom: '30px',
+                }}
+              >
+                {products.map((product) => (
+                  <div
+                    key={product.id}
+                    style={{
+                      padding: '20px',
+                      backgroundColor: 'white',
+                      borderRadius: '8px',
+                      border: '2px solid #e0e0e0',
+                      transition: 'all 0.3s',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
                     <h3 style={{ marginBottom: '10px' }}>{product.name}</h3>
                     {product.description && (
-                      <p style={{ color: '#666', fontSize: '14px', marginBottom: '10px', flex: '1' }}>{product.description}</p>
+                      <p
+                        style={{
+                          color: '#666',
+                          fontSize: '14px',
+                          marginBottom: '10px',
+                          flex: '1',
+                        }}
+                      >
+                        {product.description}
+                      </p>
                     )}
-                    <p style={{ fontWeight: 'bold', fontSize: '20px', color: '#4CAF50', marginBottom: '15px' }}>
+                    <p
+                      style={{
+                        fontWeight: 'bold',
+                        fontSize: '20px',
+                        color: '#4CAF50',
+                        marginBottom: '15px',
+                      }}
+                    >
                       ₪{product.base_price.toFixed(2)}
                     </p>
                     <button
@@ -633,7 +797,7 @@ export default function CreateOrderPage() {
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '16px',
-                        marginTop: 'auto'
+                        marginTop: 'auto',
                       }}
                     >
                       הוסף לעגלה
@@ -644,47 +808,88 @@ export default function CreateOrderPage() {
             )}
 
             {cartItems.length > 0 && (
-              <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '2px solid #4CAF50' }}>
-                <h3 style={{ marginBottom: '20px' }}>עגלת קניות ({cartItems.length} פריטים)</h3>
+              <div
+                style={{
+                  backgroundColor: 'white',
+                  padding: '20px',
+                  borderRadius: '8px',
+                  border: '2px solid #4CAF50',
+                }}
+              >
+                <h3 style={{ marginBottom: '20px' }}>
+                  עגלת קניות ({cartItems.length} פריטים)
+                </h3>
                 {cartItems.map((item, index) => (
-                  <div key={index} style={{
-                    padding: '15px',
-                    marginBottom: '10px',
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
+                  <div
+                    key={index}
+                    style={{
+                      padding: '15px',
+                      marginBottom: '10px',
+                      backgroundColor: '#f5f5f5',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <div style={{ flex: 1 }}>
                       <strong>{item.product.name}</strong>
-                      <div style={{ display: 'flex', gap: '15px', marginTop: '10px', alignItems: 'center' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '15px',
+                          marginTop: '10px',
+                          alignItems: 'center',
+                        }}
+                      >
                         <div>
                           <label style={{ fontSize: '14px', marginLeft: '5px' }}>כמות:</label>
                           <input
                             type="number"
                             value={item.quantity}
-                            onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
-                            style={{ width: '60px', padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
-                            min="1"
+                            onChange={(e) =>
+                              updateQuantity(index, parseInt(e.target.value) || 1)
+                            }
+                            style={{
+                              width: '60px',
+                              padding: '5px',
+                              borderRadius: '4px',
+                              border: '1px solid #ddd',
+                            }}
+                            min={1}
                           />
                         </div>
                         <div>
-                          <label style={{ fontSize: '14px', marginLeft: '5px' }}>הנחה (%):</label>
+                          <label style={{ fontSize: '14px', marginLeft: '5px' }}>
+                            הנחה (%):
+                          </label>
                           <input
                             type="number"
                             value={item.discount}
-                            onChange={(e) => updateDiscount(index, parseInt(e.target.value) || 0)}
-                            style={{ width: '60px', padding: '5px', borderRadius: '4px', border: '1px solid #ddd' }}
-                            min="0"
-                            max="100"
+                            onChange={(e) =>
+                              updateDiscount(index, parseInt(e.target.value) || 0)
+                            }
+                            style={{
+                              width: '60px',
+                              padding: '5px',
+                              borderRadius: '4px',
+                              border: '1px solid #ddd',
+                            }}
+                            min={0}
+                            max={100}
                           />
                         </div>
                         <div style={{ fontWeight: 'bold', color: '#4CAF50' }}>
-                          ₪{((item.product.base_price +
-                            (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
+                          ₪
+                          {(
+                            (item.product.base_price +
+                              (item.selectedOptions?.reduce(
+                                (sum: number, opt: any) => sum + (opt?.price || 0),
+                                0
+                              ) || 0)) *
                             item.quantity *
-                            (1 - (item.discount || 0) / 100)).toFixed(2)}
+                            (1 - (item.discount || 0) / 100)
+                          ).toFixed(2)}
                         </div>
                       </div>
                     </div>
@@ -696,14 +901,22 @@ export default function CreateOrderPage() {
                         color: 'white',
                         border: 'none',
                         borderRadius: '6px',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
                       }}
                     >
                       הסר
                     </button>
                   </div>
                 ))}
-                <div style={{ marginTop: '20px', fontSize: '24px', fontWeight: 'bold', textAlign: 'left', color: '#4CAF50' }}>
+                <div
+                  style={{
+                    marginTop: '20px',
+                    fontSize: '24px',
+                    fontWeight: 'bold',
+                    textAlign: 'left',
+                    color: '#4CAF50',
+                  }}
+                >
                   סה"כ: ₪{calculateTotal().toFixed(2)}
                 </div>
               </div>
@@ -718,28 +931,38 @@ export default function CreateOrderPage() {
 
             <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '8px' }}>
               <div style={{ marginBottom: '25px' }}>
-                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>אמצעי תשלום:</label>
+                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                  אמצעי תשלום:
+                </label>
                 <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
                   {[
                     { value: 'cash', label: 'מזומן' },
                     { value: 'credit', label: 'כרטיס אשראי' },
                     { value: 'bank_transfer', label: 'העברה בנקאית' },
-                    { value: 'check', label: 'שיק' }
-                  ].map(method => (
-                    <label key={method.value} style={{
-                      padding: '15px 25px',
-                      border: `2px solid ${paymentInfo.paymentMethod === method.value ? '#4CAF50' : '#ddd'}`,
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      backgroundColor: paymentInfo.paymentMethod === method.value ? '#e8f5e9' : 'white',
-                      fontWeight: paymentInfo.paymentMethod === method.value ? 'bold' : 'normal'
-                    }}>
+                    { value: 'check', label: 'שיק' },
+                  ].map((method) => (
+                    <label
+                      key={method.value}
+                      style={{
+                        padding: '15px 25px',
+                        border: `2px solid ${paymentInfo.paymentMethod === method.value ? '#4CAF50' : '#ddd'
+                          }`,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        backgroundColor:
+                          paymentInfo.paymentMethod === method.value ? '#e8f5e9' : 'white',
+                        fontWeight:
+                          paymentInfo.paymentMethod === method.value ? 'bold' : 'normal',
+                      }}
+                    >
                       <input
                         type="radio"
                         name="paymentMethod"
                         value={method.value}
                         checked={paymentInfo.paymentMethod === method.value}
-                        onChange={(e) => setPaymentInfo({ ...paymentInfo, paymentMethod: e.target.value })}
+                        onChange={(e) =>
+                          setPaymentInfo({ ...paymentInfo, paymentMethod: e.target.value })
+                        }
                         style={{ marginLeft: '8px' }}
                       />
                       {method.label}
@@ -749,7 +972,9 @@ export default function CreateOrderPage() {
               </div>
 
               <div style={{ marginBottom: '25px' }}>
-                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>תנאי תשלום:</label>
+                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                  תנאי תשלום:
+                </label>
                 <select
                   value={paymentInfo.paymentTerms}
                   onChange={(e) => setPaymentInfo({ ...paymentInfo, paymentTerms: e.target.value })}
@@ -758,7 +983,7 @@ export default function CreateOrderPage() {
                     padding: '12px',
                     fontSize: '16px',
                     borderRadius: '8px',
-                    border: '2px solid #ddd'
+                    border: '2px solid #ddd',
                   }}
                 >
                   <option value="immediate">תשלום מיידי</option>
@@ -770,7 +995,9 @@ export default function CreateOrderPage() {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>הערות תשלום:</label>
+                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                  הערות תשלום:
+                </label>
                 <textarea
                   value={paymentInfo.notes}
                   onChange={(e) => setPaymentInfo({ ...paymentInfo, notes: e.target.value })}
@@ -782,7 +1009,7 @@ export default function CreateOrderPage() {
                     borderRadius: '8px',
                     border: '2px solid #ddd',
                     minHeight: '100px',
-                    resize: 'vertical'
+                    resize: 'vertical',
                   }}
                 />
               </div>
@@ -798,7 +1025,7 @@ export default function CreateOrderPage() {
             <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ marginBottom: '15px', color: '#2196F3' }}>פרטי לקוח</h3>
               {(() => {
-                const customer = customers.find(c => c.id === selectedCustomer);
+                const customer = customers.find((c) => c.id === selectedCustomer);
                 return customer ? (
                   <div style={{ padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
                     <p><strong>שם:</strong> {customer.name}</p>
@@ -813,14 +1040,17 @@ export default function CreateOrderPage() {
             <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '8px', marginBottom: '20px' }}>
               <h3 style={{ marginBottom: '15px', color: '#2196F3' }}>פריטים בהזמנה</h3>
               {cartItems.map((item, index) => (
-                <div key={index} style={{
-                  padding: '15px',
-                  marginBottom: '10px',
-                  backgroundColor: '#f5f5f5',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between'
-                }}>
+                <div
+                  key={index}
+                  style={{
+                    padding: '15px',
+                    marginBottom: '10px',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                  }}
+                >
                   <div>
                     <strong>{item.product.name}</strong>
                     <div style={{ fontSize: '14px', color: '#666', marginTop: '5px' }}>
@@ -829,22 +1059,30 @@ export default function CreateOrderPage() {
                     </div>
                   </div>
                   <div style={{ fontWeight: 'bold', color: '#4CAF50' }}>
-                    ₪{((item.product.base_price +
-                      (item.selectedOptions?.reduce((sum: number, opt: any) => sum + (opt?.price || 0), 0) || 0)) *
+                    ₪
+                    {(
+                      (item.product.base_price +
+                        (item.selectedOptions?.reduce(
+                          (sum: number, opt: any) => sum + (opt?.price || 0),
+                          0
+                        ) || 0)) *
                       item.quantity *
-                      (1 - (item.discount || 0) / 100)).toFixed(2)}
+                      (1 - (item.discount || 0) / 100)
+                    ).toFixed(2)}
                   </div>
                 </div>
               ))}
-              <div style={{
-                marginTop: '20px',
-                padding: '15px',
-                backgroundColor: '#e8f5e9',
-                borderRadius: '8px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
+              <div
+                style={{
+                  marginTop: '20px',
+                  padding: '15px',
+                  backgroundColor: '#e8f5e9',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
                 <span style={{ fontSize: '20px', fontWeight: 'bold' }}>סה"כ לתשלום:</span>
                 <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#4CAF50' }}>
                   ₪{calculateTotal().toFixed(2)}
@@ -890,7 +1128,7 @@ export default function CreateOrderPage() {
                 fontSize: '16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '8px',
               }}
             >
               <ChevronRight size={20} />
@@ -914,7 +1152,7 @@ export default function CreateOrderPage() {
                 fontWeight: 'bold',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '8px',
               }}
             >
               המשך
@@ -935,7 +1173,7 @@ export default function CreateOrderPage() {
                 fontWeight: 'bold',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '8px',
               }}
             >
               <Check size={20} />

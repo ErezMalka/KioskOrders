@@ -32,7 +32,7 @@ export default function ProductsPage() {
   const [uploadingGallery, setUploadingGallery] = useState(false)
   const [imagePreview, setImagePreview] = useState<string>('')
   const [galleryPreviews, setGalleryPreviews] = useState<string[]>([])
-  const [selectedProductImage, setSelectedProductImage] = useState<{[key: string]: number}>({})
+  const [selectedProductImage, setSelectedProductImage] = useState<{ [key: string]: number }>({})
   const [showImageModal, setShowImageModal] = useState(false)
   const [modalImage, setModalImage] = useState<string>('')
   const [modalImages, setModalImages] = useState<string[]>([])
@@ -42,13 +42,12 @@ export default function ProductsPage() {
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [customCategories, setCustomCategories] = useState<string[]>([])
-  
-  // Product Detail Popup
+
   const [showProductPopup, setShowProductPopup] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [selectedPopupImageIndex, setSelectedPopupImageIndex] = useState(0)
   const [numberOfPayments, setNumberOfPayments] = useState(1)
-  
+
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -79,11 +78,12 @@ export default function ProductsPage() {
       if (e.key === 'Escape') {
         if (showImageModal) setShowImageModal(false)
         if (showProductPopup) setShowProductPopup(false)
+        if (showForm) handleCancel()
       }
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [showImageModal, showProductPopup])
+  }, [showImageModal, showProductPopup, showForm])
 
   const loadCustomCategories = () => {
     const saved = localStorage.getItem('customCategories')
@@ -103,7 +103,7 @@ export default function ProductsPage() {
       alert('נא להזין שם קטגוריה')
       return
     }
-    
+
     const allCats = getAllCategories()
     if (allCats.includes(trimmedName)) {
       alert('קטגוריה זו כבר קיימת')
@@ -120,7 +120,7 @@ export default function ProductsPage() {
   const checkUser = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) {
         router.push('/login')
         return
@@ -142,7 +142,7 @@ export default function ProductsPage() {
         console.error('Error fetching products:', error)
         throw error
       }
-      
+
       setProducts(data || [])
     } catch (error) {
       console.error('Error fetching products:', error)
@@ -161,7 +161,6 @@ export default function ProductsPage() {
 
   const calculatePriceWithPayments = (basePrice: number, payments: number) => {
     if (payments === 1) return basePrice
-    // כאן תוכל להוסיף לוגיקה של ריבית/עמלה אם צריך
     return basePrice
   }
 
@@ -171,9 +170,9 @@ export default function ProductsPage() {
 
   const addToCart = (product: Product, payments: number) => {
     const cart = JSON.parse(sessionStorage.getItem('orderCart') || '[]')
-    
+
     const totalPrice = calculatePriceWithPayments(product.price || product.base_price, payments)
-    
+
     cart.push({
       product: product,
       quantity: 1,
@@ -183,7 +182,7 @@ export default function ProductsPage() {
       totalPrice: totalPrice,
       pricePerPayment: getPricePerPayment(totalPrice, payments)
     })
-    
+
     sessionStorage.setItem('orderCart', JSON.stringify(cart))
     alert(`${product.name} נוסף לסל!\nתשלומים: ${payments}\nמחיר לתשלום: ₪${getPricePerPayment(totalPrice, payments).toFixed(2)}`)
     setShowProductPopup(false)
@@ -211,7 +210,7 @@ export default function ProductsPage() {
 
       setFormData({ ...formData, image_url: publicUrl })
       setImagePreview(publicUrl)
-      
+
     } catch (error) {
       console.error('Error uploading image:', error)
       alert('שגיאה בהעלאת התמונה')
@@ -250,7 +249,7 @@ export default function ProductsPage() {
       const newGalleryImages = [...formData.gallery_images, ...uploadedUrls]
       setFormData({ ...formData, gallery_images: newGalleryImages })
       setGalleryPreviews([...galleryPreviews, ...uploadedUrls])
-      
+
     } catch (error) {
       console.error('Error uploading gallery images:', error)
       alert('שגיאה בהעלאת תמונות הגלריה')
@@ -281,7 +280,7 @@ export default function ProductsPage() {
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault()
-    
+
     if (draggedIndex === null || draggedIndex === dropIndex) {
       setDraggedIndex(null)
       setDragOverIndex(null)
@@ -290,12 +289,12 @@ export default function ProductsPage() {
 
     const newGalleryImages = [...galleryPreviews]
     const draggedImage = newGalleryImages[draggedIndex]
-    
+
     newGalleryImages.splice(draggedIndex, 1)
-    
+
     const adjustedDropIndex = dropIndex > draggedIndex ? dropIndex - 1 : dropIndex
     newGalleryImages.splice(adjustedDropIndex, 0, draggedImage)
-    
+
     setGalleryPreviews(newGalleryImages)
     setFormData({ ...formData, gallery_images: newGalleryImages })
     setDraggedIndex(null)
@@ -311,20 +310,20 @@ export default function ProductsPage() {
 
   const navigateModal = (direction: 'prev' | 'next') => {
     let newIndex = modalImageIndex
-    
+
     if (direction === 'prev') {
       newIndex = modalImageIndex > 0 ? modalImageIndex - 1 : modalImages.length - 1
     } else {
       newIndex = modalImageIndex < modalImages.length - 1 ? modalImageIndex + 1 : 0
     }
-    
+
     setModalImageIndex(newIndex)
     setModalImage(modalImages[newIndex])
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    
+
     try {
       const productData = {
         name: formData.name.trim(),
@@ -351,7 +350,7 @@ export default function ProductsPage() {
           ...productData,
           created_at: new Date().toISOString()
         }
-        
+
         const { data, error } = await supabase
           .from('products')
           .insert([newProduct])
@@ -361,24 +360,24 @@ export default function ProductsPage() {
       }
 
       await fetchProducts()
-      
-      setFormData({ 
-        name: '', 
-        category: '', 
+
+      setFormData({
+        name: '',
+        category: '',
         base_price: '',
         price: '',
         description: '',
         image_url: '',
         gallery_images: [],
-        active: true 
+        active: true
       })
       setImagePreview('')
       setGalleryPreviews([])
       setShowForm(false)
       setEditingProduct(null)
-      
+
       alert(editingProduct ? 'המוצר עודכן בהצלחה!' : 'המוצר נוסף בהצלחה!')
-      
+
     } catch (error: any) {
       console.error('Error saving product:', error)
       alert('שגיאה בשמירת המוצר: ' + (error.message || 'שגיאה לא ידועה'))
@@ -395,7 +394,7 @@ export default function ProductsPage() {
         .eq('id', id)
 
       if (error) throw error
-      
+
       await fetchProducts()
       alert('המוצר נמחק בהצלחה')
     } catch (error: any) {
@@ -425,15 +424,15 @@ export default function ProductsPage() {
   function handleCancel() {
     setShowForm(false)
     setEditingProduct(null)
-    setFormData({ 
-      name: '', 
-      category: '', 
+    setFormData({
+      name: '',
+      category: '',
       base_price: '',
       price: '',
       description: '',
       image_url: '',
       gallery_images: [],
-      active: true 
+      active: true
     })
     setImagePreview('')
     setGalleryPreviews([])
@@ -445,8 +444,8 @@ export default function ProductsPage() {
     setSelectedProductImage({ ...selectedProductImage, [productId]: imageIndex })
   }
 
-  const filteredProducts = selectedCategory === 'הכל' 
-    ? products 
+  const filteredProducts = selectedCategory === 'הכל'
+    ? products
     : products.filter(p => p.category === selectedCategory)
 
   if (loading) {
@@ -473,9 +472,408 @@ export default function ProductsPage() {
       backgroundColor: '#f5f5f5',
       direction: 'rtl'
     }}>
+      {/* Form Popup */}
+      {showForm && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            overflow: 'auto'
+          }}
+          onClick={handleCancel}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              maxWidth: '800px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={handleCancel}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                left: '15px',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                color: 'white',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                zIndex: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ padding: '40px 30px 30px' }}>
+              <h2 style={{ marginBottom: '25px', color: '#333', fontSize: '28px' }}>
+                {editingProduct ? 'עריכת מוצר' : 'הוספת מוצר חדש'}
+              </h2>
+
+              <div style={{ display: 'grid', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                    שם המוצר *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '16px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                    קטגוריה *
+                  </label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <select
+                      required
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        fontSize: '16px',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <option value="">בחר קטגוריה</option>
+                      {getAllCategories().map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategoryInput(!showNewCategoryInput)}
+                      style={{
+                        padding: '12px 20px',
+                        backgroundColor: '#9C27B0',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      קטגוריה חדשה
+                    </button>
+                  </div>
+                  {showNewCategoryInput && (
+                    <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                      <input
+                        type="text"
+                        placeholder="שם קטגוריה חדשה"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          border: '1px solid #ddd',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddNewCategory}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        הוסף
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                      מחיר בסיס *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formData.base_price}
+                      onChange={(e) => setFormData({ ...formData, base_price: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '16px',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                      מחיר מבצע
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '16px',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                    תיאור
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '16px',
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      boxSizing: 'border-box',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                    תמונה ראשית
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: uploadingImage ? '#ccc' : '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: uploadingImage ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {uploadingImage ? 'מעלה...' : 'בחר תמונה'}
+                  </button>
+                  {imagePreview && (
+                    <div style={{ marginTop: '10px' }}>
+                      <img src={imagePreview} alt="תצוגה מקדימה" style={{ maxWidth: '200px', borderRadius: '8px' }} />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                    גלריית תמונות
+                  </label>
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleGalleryUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    disabled={uploadingGallery}
+                    style={{
+                      padding: '12px 24px',
+                      backgroundColor: uploadingGallery ? '#ccc' : '#FF9800',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: uploadingGallery ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {uploadingGallery ? 'מעלה...' : 'הוסף תמונות'}
+                  </button>
+
+                  {galleryPreviews.length > 0 && (
+                    <div style={{
+                      marginTop: '15px',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                      gap: '10px'
+                    }}>
+                      {galleryPreviews.map((url, index) => (
+                        <div
+                          key={index}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, index)}
+                          style={{
+                            position: 'relative',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            cursor: 'move',
+                            border: dragOverIndex === index ? '3px dashed #4CAF50' : '2px solid #ddd'
+                          }}
+                        >
+                          <img
+                            src={url}
+                            alt={`גלריה ${index + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '100px',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(index)}
+                            style={{
+                              position: 'absolute',
+                              top: '5px',
+                              left: '5px',
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              backgroundColor: 'rgba(244, 67, 54, 0.9)',
+                              color: 'white',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    color: '#333'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.active}
+                      onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    מוצר פעיל
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    style={{
+                      flex: 1,
+                      padding: '14px',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {editingProduct ? 'עדכן מוצר' : 'הוסף מוצר'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    style={{
+                      flex: 1,
+                      padding: '14px',
+                      backgroundColor: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Product Detail Popup */}
       {showProductPopup && selectedProduct && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: 0,
@@ -492,7 +890,7 @@ export default function ProductsPage() {
           }}
           onClick={() => setShowProductPopup(false)}
         >
-          <div 
+          <div
             style={{
               backgroundColor: 'white',
               borderRadius: '16px',
@@ -528,12 +926,11 @@ export default function ProductsPage() {
             </button>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', padding: '30px' }}>
-              {/* Images Section */}
               <div>
                 {(() => {
                   const allImages = [selectedProduct.image_url, ...(selectedProduct.gallery_images || [])].filter(Boolean)
                   const currentImage = allImages[selectedPopupImageIndex]
-                  
+
                   return (
                     <>
                       <div style={{
@@ -546,11 +943,11 @@ export default function ProductsPage() {
                         position: 'relative',
                         cursor: 'zoom-in'
                       }}
-                      onClick={() => currentImage && openImageModal(allImages, selectedPopupImageIndex)}
+                        onClick={() => currentImage && openImageModal(allImages, selectedPopupImageIndex)}
                       >
                         {currentImage ? (
-                          <img 
-                            src={currentImage} 
+                          <img
+                            src={currentImage}
                             alt={selectedProduct.name}
                             style={{
                               width: '100%',
@@ -559,12 +956,12 @@ export default function ProductsPage() {
                             }}
                           />
                         ) : (
-                          <div style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center' 
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                           }}>
                             <span style={{ fontSize: '64px', color: '#ccc' }}>🍽️</span>
                           </div>
@@ -587,8 +984,8 @@ export default function ProductsPage() {
                                 flexShrink: 0
                               }}
                             >
-                              <img 
-                                src={img} 
+                              <img
+                                src={img}
                                 alt={`תמונה ${index + 1}`}
                                 style={{
                                   width: '100%',
@@ -605,7 +1002,6 @@ export default function ProductsPage() {
                 })()}
               </div>
 
-              {/* Details Section */}
               <div>
                 <span style={{
                   display: 'inline-block',
@@ -739,7 +1135,7 @@ export default function ProductsPage() {
 
       {/* Image Modal */}
       {showImageModal && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: 0,
@@ -890,19 +1286,16 @@ export default function ProductsPage() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <h1 style={{ 
+          <h1 style={{
             margin: 0,
             fontSize: '24px',
-            color: '#333',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
+            color: '#333'
           }}>
             ניהול מוצרים
           </h1>
-          
+
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => setShowForm(true)}
             style={{
               backgroundColor: '#4CAF50',
               color: 'white',
@@ -926,19 +1319,6 @@ export default function ProductsPage() {
       </header>
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-        
-        {/* Form Section - כאן יבוא כל קוד הטופס הקיים שלך */}
-        {showForm && (
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '12px',
-            marginBottom: '30px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-          }}>
-            {/* כל קוד הטופס הקיים נשאר כמו שהוא */}
-          </div>
-        )}
 
         {/* Category Tabs */}
         <div style={{
@@ -987,7 +1367,7 @@ export default function ProductsPage() {
             const allImages = [product.image_url, ...(product.gallery_images || [])].filter(Boolean)
             const currentImageIndex = selectedProductImage[product.id] || 0
             const currentImage = allImages[currentImageIndex]
-            
+
             return (
               <div
                 key={product.id}
@@ -999,7 +1379,10 @@ export default function ProductsPage() {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                   transition: 'all 0.3s',
                   position: 'relative',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-5px)'
@@ -1021,8 +1404,8 @@ export default function ProductsPage() {
                   position: 'relative'
                 }}>
                   {currentImage ? (
-                    <img 
-                      src={currentImage} 
+                    <img
+                      src={currentImage}
                       alt={product.name}
                       style={{
                         width: '100%',
@@ -1066,7 +1449,7 @@ export default function ProductsPage() {
                       ))}
                     </div>
                   )}
-                  
+
                   <div style={{
                     position: 'absolute',
                     top: '10px',
@@ -1082,7 +1465,7 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                <div style={{ padding: '15px' }}>
+                <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1103,7 +1486,9 @@ export default function ProductsPage() {
                       fontSize: '11px',
                       backgroundColor: '#9C27B0',
                       color: 'white',
-                      fontWeight: '500'
+                      fontWeight: '500',
+                      flexShrink: 0,
+                      marginRight: '8px'
                     }}>
                       {product.category}
                     </span>
@@ -1114,16 +1499,17 @@ export default function ProductsPage() {
                       margin: '0 0 10px 0',
                       fontSize: '13px',
                       color: '#666',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      minHeight: '36px'
                     }}>
-                      {product.description.length > 60 
-                        ? product.description.substring(0, 60) + '...' 
+                      {product.description.length > 60
+                        ? product.description.substring(0, 60) + '...'
                         : product.description}
                     </p>
                   )}
 
                   <div style={{
-                    marginTop: '15px',
+                    marginTop: 'auto',
                     paddingTop: '15px',
                     borderTop: '1px solid #f0f0f0'
                   }}>
@@ -1161,6 +1547,7 @@ export default function ProductsPage() {
                       <button
                         onClick={(e) => handleEdit(product, e)}
                         style={{
+                          flex: 1,
                           padding: '10px',
                           backgroundColor: '#2196F3',
                           color: 'white',
@@ -1173,7 +1560,7 @@ export default function ProductsPage() {
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2196F3'}
                       >
-                        ✏️
+                        ✏️ ערוך
                       </button>
                       <button
                         onClick={(e) => {
@@ -1181,6 +1568,7 @@ export default function ProductsPage() {
                           handleDelete(product.id, product.name)
                         }}
                         style={{
+                          flex: 1,
                           padding: '10px',
                           backgroundColor: '#f44336',
                           color: 'white',
@@ -1193,7 +1581,7 @@ export default function ProductsPage() {
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d32f2f'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f44336'}
                       >
-                        🗑️
+                        🗑️ מחק
                       </button>
                     </div>
                   </div>
@@ -1214,8 +1602,8 @@ export default function ProductsPage() {
             <div style={{ fontSize: '64px', marginBottom: '20px' }}>📦</div>
             <h3 style={{ color: '#333', marginBottom: '10px' }}>אין מוצרים להצגה</h3>
             <p style={{ color: '#666' }}>
-              {selectedCategory !== 'הכל' 
-                ? `אין מוצרים בקטגוריה "${selectedCategory}"` 
+              {selectedCategory !== 'הכל'
+                ? `אין מוצרים בקטגוריה "${selectedCategory}"`
                 : 'לחץ על "הוסף מוצר חדש" כדי להתחיל'}
             </p>
           </div>

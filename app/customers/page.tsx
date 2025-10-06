@@ -195,11 +195,17 @@ export default function CustomersPage() {
     setShowEditModal(true);
   };
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.phone.includes(searchTerm)
-  );
+  const filteredCustomers = customers
+    .filter(customer => {
+      const search = searchTerm.toLowerCase();
+      return (
+        (customer.name && customer.name.toLowerCase().includes(search)) ||
+        (customer.email && customer.email.toLowerCase().includes(search)) ||
+        (customer.phone && customer.phone.includes(searchTerm)) ||
+        (customer.address && customer.address.toLowerCase().includes(search))
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'he'));
 
   if (loading) {
     return (
@@ -300,14 +306,14 @@ export default function CustomersPage() {
         }}>
           <input
             type="text"
-            placeholder="חיפוש לקוח..."
+            placeholder="חיפוש לפי שם, אימייל, טלפון או כתובת..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '5px',
-              width: '300px',
+              width: '400px',
               fontSize: '16px'
             }}
           />
@@ -501,6 +507,8 @@ export default function CustomersPage() {
                 setShowAddModal(false);
                 setError(null);
               }}
+              allowCustomFields={true}
+
             />
           </div>
         </div>
@@ -540,6 +548,7 @@ export default function CustomersPage() {
                 setError(null);
               }}
               isEdit={true}
+              allowCustomFields={true}
             />
           </div>
         </div>

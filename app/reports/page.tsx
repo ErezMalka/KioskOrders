@@ -1,138 +1,77 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Download, Filter, TrendingUp, Users, Package, DollarSign, BarChart3, PieChart, Activity, ChevronDown, Eye, Search, Printer, FileText, ArrowUp, ArrowDown } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Download, Filter, TrendingUp, Package, DollarSign, BarChart3, UserCheck, Briefcase, ShoppingBag, ArrowUp, ArrowDown, Printer, FileText } from 'lucide-react';
 
-export default function ReportsPage() {
-  // User role - in production this would come from auth context
-  const [userRole, setUserRole] = useState<'admin' | 'agent'>('admin');
-  const [currentUserId] = useState('agent-123');
+export default function AgentReportsPage() {
+  const currentUserId = 'agent-123';
   
-  // Filters state
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
-  const [selectedAgent, setSelectedAgent] = useState('all');
-  const [selectedProduct, setSelectedProduct] = useState('all');
-  const [reportType, setReportType] = useState<'summary' | 'agents' | 'products' | 'detailed'>('summary');
-  const [searchTerm, setSearchTerm] = useState('');
 
-  // Sample data - replace with API call
   const [salesData] = useState([
-    { id: 1, date: '2024-01-15', agent: 'agent-123', agentName: 'דוד כהן', product: 'מוצר A', quantity: 5, amount: 2500, customer: 'לקוח 1', status: 'completed' },
-    { id: 2, date: '2024-01-16', agent: 'agent-456', agentName: 'שרה לוי', product: 'מוצר B', quantity: 3, amount: 1800, customer: 'לקוח 2', status: 'completed' },
-    { id: 3, date: '2024-01-17', agent: 'agent-123', agentName: 'דוד כהן', product: 'מוצר C', quantity: 2, amount: 3200, customer: 'לקוח 3', status: 'pending' },
-    { id: 4, date: '2024-01-18', agent: 'agent-789', agentName: 'יוסי אברהם', product: 'מוצר A', quantity: 7, amount: 3500, customer: 'לקוח 4', status: 'completed' },
-    { id: 5, date: '2024-01-19', agent: 'agent-123', agentName: 'דוד כהן', product: 'מוצר B', quantity: 4, amount: 2400, customer: 'לקוח 5', status: 'completed' },
-    { id: 6, date: '2024-01-20', agent: 'agent-456', agentName: 'שרה לוי', product: 'מוצר D', quantity: 6, amount: 4200, customer: 'לקוח 6', status: 'completed' },
+    { id: 1, date: '2024-06-15', agent: 'agent-123', agentName: 'דוד כהן', customer: 'לקוח 1', commission: 500, setupFee: 1200, physicalProducts: 2500, digitalProducts: 1800, totalSale: 6000, status: 'completed' },
+    { id: 2, date: '2024-06-16', agent: 'agent-123', agentName: 'דוד כהן', customer: 'לקוח 2', commission: 450, setupFee: 1500, physicalProducts: 3200, digitalProducts: 2100, totalSale: 7250, status: 'completed' },
+    { id: 3, date: '2024-06-17', agent: 'agent-456', agentName: 'שרה לוי', customer: 'לקוח 3', commission: 600, setupFee: 1000, physicalProducts: 1800, digitalProducts: 1500, totalSale: 4900, status: 'completed' },
+    { id: 4, date: '2024-06-18', agent: 'agent-123', agentName: 'דוד כהן', customer: 'לקוח 4', commission: 700, setupFee: 2000, physicalProducts: 4200, digitalProducts: 2800, totalSale: 9700, status: 'completed' },
+    { id: 5, date: '2024-06-19', agent: 'agent-456', agentName: 'שרה לוי', customer: 'לקוח 5', commission: 550, setupFee: 1800, physicalProducts: 2900, digitalProducts: 1900, totalSale: 7150, status: 'pending' },
+    { id: 6, date: '2024-06-20', agent: 'agent-789', agentName: 'יוסי אברהם', customer: 'לקוח 6', commission: 800, setupFee: 2500, physicalProducts: 5000, digitalProducts: 3500, totalSale: 11800, status: 'completed' },
+    { id: 7, date: '2024-06-21', agent: 'agent-123', agentName: 'דוד כהן', customer: 'לקוח 7', commission: 650, setupFee: 1600, physicalProducts: 3500, digitalProducts: 2200, totalSale: 7950, status: 'completed' },
   ]);
 
-  const agents = [
-    { id: 'agent-123', name: 'דוד כהן' },
-    { id: 'agent-456', name: 'שרה לוי' },
-    { id: 'agent-789', name: 'יוסי אברהם' }
-  ];
-
-  const products = ['מוצר A', 'מוצר B', 'מוצר C', 'מוצר D'];
-
-  // Filter data based on user role and selected filters
   const filteredData = useMemo(() => {
-    let filtered = [...salesData];
+    let filtered = salesData.filter(item => item.agent === currentUserId);
     
-    // If agent, only show their own data
-    if (userRole === 'agent') {
-      filtered = filtered.filter(item => item.agent === currentUserId);
-    } else if (selectedAgent !== 'all') {
-      filtered = filtered.filter(item => item.agent === selectedAgent);
-    }
-    
-    if (selectedProduct !== 'all') {
-      filtered = filtered.filter(item => item.product === selectedProduct);
-    }
-    
-    if (searchTerm) {
-      filtered = filtered.filter(item => 
-        item.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.product.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.agentName.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+    filtered = filtered.filter(item => {
+      const itemDate = new Date(item.date);
+      const startDate = new Date(dateRange.start);
+      const endDate = new Date(dateRange.end);
+      return itemDate >= startDate && itemDate <= endDate;
+    });
     
     return filtered;
-  }, [salesData, userRole, currentUserId, selectedAgent, selectedProduct, searchTerm]);
+  }, [salesData, currentUserId, dateRange]);
 
-  // Calculate statistics
   const stats = useMemo(() => {
     const completed = filteredData.filter(item => item.status === 'completed');
-    const totalSales = completed.reduce((sum, item) => sum + item.amount, 0);
-    const totalQuantity = completed.reduce((sum, item) => sum + item.quantity, 0);
-    const avgOrderValue = completed.length > 0 ? totalSales / completed.length : 0;
     
-    // Calculate trend (comparing to previous period)
-    const previousTotal = totalSales * 0.8; // Sample calculation
-    const trend = ((totalSales - previousTotal) / previousTotal * 100).toFixed(1);
+    const totalCustomers = completed.length;
+    const totalCommissions = completed.reduce((sum, item) => sum + item.commission, 0);
+    const totalSetupFees = completed.reduce((sum, item) => sum + item.setupFee, 0);
+    const totalPhysicalProducts = completed.reduce((sum, item) => sum + item.physicalProducts, 0);
+    const totalDigitalProducts = completed.reduce((sum, item) => sum + item.digitalProducts, 0);
+    const totalSales = completed.reduce((sum, item) => sum + item.totalSale, 0);
+    const avgSalePerCustomer = totalCustomers > 0 ? totalSales / totalCustomers : 0;
+    
+    const prevCommissions = totalCommissions * 0.85;
+    const commissionTrend = prevCommissions > 0 ? ((totalCommissions - prevCommissions) / prevCommissions * 100) : 0;
     
     return {
+      totalCustomers,
+      totalCommissions,
+      totalSetupFees,
+      totalPhysicalProducts,
+      totalDigitalProducts,
       totalSales,
-      totalOrders: completed.length,
-      totalQuantity,
-      avgOrderValue,
-      trend: parseFloat(trend)
+      avgSalePerCustomer,
+      commissionTrend: commissionTrend.toFixed(1),
+      pendingDeals: filteredData.filter(item => item.status === 'pending').length
     };
   }, [filteredData]);
 
-  // Group data by agent for admin view
-  const agentPerformance = useMemo(() => {
-    if (userRole !== 'admin') return [];
-    
-    const grouped: Record<string, { sales: number; orders: number; quantity: number }> = {};
-    filteredData.forEach(item => {
-      if (!grouped[item.agentName]) {
-        grouped[item.agentName] = { sales: 0, orders: 0, quantity: 0 };
-      }
-      if (item.status === 'completed') {
-        grouped[item.agentName].sales += item.amount;
-        grouped[item.agentName].orders += 1;
-        grouped[item.agentName].quantity += item.quantity;
-      }
-    });
-    
-    return Object.entries(grouped).map(([name, data]) => ({
-      name,
-      ...data
-    })).sort((a, b) => b.sales - a.sales);
-  }, [filteredData, userRole]);
-
-  // Product performance
-  const productPerformance = useMemo(() => {
-    const grouped: Record<string, { sales: number; quantity: number }> = {};
-    filteredData.forEach(item => {
-      if (!grouped[item.product]) {
-        grouped[item.product] = { sales: 0, quantity: 0 };
-      }
-      if (item.status === 'completed') {
-        grouped[item.product].sales += item.amount;
-        grouped[item.product].quantity += item.quantity;
-      }
-    });
-    
-    return Object.entries(grouped).map(([name, data]) => ({
-      name,
-      ...data
-    })).sort((a, b) => b.sales - a.sales);
-  }, [filteredData]);
-
   const exportToCSV = () => {
-    const headers = ['תאריך', 'סוכן', 'מוצר', 'כמות', 'סכום', 'לקוח', 'סטטוס'];
+    const headers = ['תאריך', 'לקוח', 'עמלה', 'דמי הקמה', 'מוצרים פיזיים', 'מוצרים דיגיטליים', 'סה"כ', 'סטטוס'];
     const rows = filteredData.map(item => [
       item.date,
-      item.agentName,
-      item.product,
-      item.quantity,
-      item.amount,
       item.customer,
-      item.status
+      item.commission,
+      item.setupFee,
+      item.physicalProducts,
+      item.digitalProducts,
+      item.totalSale,
+      item.status === 'completed' ? 'הושלם' : 'ממתין'
     ]);
     
     const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -140,41 +79,56 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `agent_report_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4" dir="rtl">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '1.5rem', direction: 'rtl' }}>
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="flex justify-between items-start">
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">מערכת דוחות מכירות</h1>
-            <p className="text-gray-600 mt-2">
-              {userRole === 'admin' ? 'ניהול וניתוח ביצועי מכירות' : 'ביצועי המכירות שלך'}
-            </p>
+            <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#111827', margin: 0 }}>דוחות מכירות</h1>
+            <p style={{ color: '#6b7280', marginTop: '0.5rem' }}>ניתוח הביצועים שלך</p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setUserRole(userRole === 'admin' ? 'agent' : 'admin')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Users className="w-4 h-4" />
-              {userRole === 'admin' ? 'מצב אדמין' : 'מצב סוכן'}
-            </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             <button
               onClick={exportToCSV}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
             >
-              <Download className="w-4 h-4" />
-              ייצוא לאקסל
+              <Download style={{ width: '1rem', height: '1rem' }} />
+              ייצוא
             </button>
             <button
               onClick={() => window.print()}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
             >
-              <Printer className="w-4 h-4" />
+              <Printer style={{ width: '1rem', height: '1rem' }} />
               הדפסה
             </button>
           </div>
@@ -182,333 +136,270 @@ export default function ReportsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <h2 className="text-xl font-semibold">סינון וחיפוש</h2>
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          <Filter style={{ width: '1.25rem', height: '1.25rem', color: '#6366f1' }} />
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827', margin: 0 }}>בחירת טווח תאריכים</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">מתאריך</label>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', marginBottom: '0.5rem' }}>מתאריך</label>
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{
+                width: '96%',
+                padding: '0.5rem 1rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                direction: 'ltr',
+                textAlign: 'right'
+              }}
             />
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">עד תאריך</label>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', marginBottom: '0.5rem' }}>עד תאריך</label>
             <input
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{
+                width: '96%',
+                padding: '0.5rem 1rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                direction: 'ltr',
+                textAlign: 'right'
+              }}
             />
-          </div>
-          
-          {userRole === 'admin' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">סוכן</label>
-              <select
-                value={selectedAgent}
-                onChange={(e) => setSelectedAgent(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">כל הסוכנים</option>
-                {agents.map(agent => (
-                  <option key={agent.id} value={agent.id}>{agent.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">מוצר</label>
-            <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">כל המוצרים</option>
-              {products.map(product => (
-                <option key={product} value={product}>{product}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">חיפוש</label>
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="חפש לפי לקוח, מוצר..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
           </div>
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <DollarSign className="w-10 h-10 text-green-500 bg-green-100 rounded-lg p-2" />
-            {stats.trend > 0 ? (
-              <span className="flex items-center text-green-600 text-sm">
-                <ArrowUp className="w-4 h-4" />
-                {stats.trend}%
-              </span>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '0.75rem',
+        marginBottom: '1.5rem'
+      }}>
+        {/* Total Customers */}
+        <div style={{
+          background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <UserCheck style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>סה"כ לקוחות</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{stats.totalCustomers}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>בתקופה שנבחרה</div>
+        </div>
+
+        {/* Total Commissions */}
+        <div style={{
+          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <DollarSign style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>סה"כ עמלות</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.totalCommissions.toLocaleString()}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.65rem' }}>
+            {parseFloat(stats.commissionTrend) > 0 ? (
+              <>
+                <ArrowUp style={{ width: '0.65rem', height: '0.65rem' }} />
+                <span>+{stats.commissionTrend}%</span>
+              </>
             ) : (
-              <span className="flex items-center text-red-600 text-sm">
-                <ArrowDown className="w-4 h-4" />
-                {Math.abs(stats.trend)}%
-              </span>
+              <>
+                <ArrowDown style={{ width: '0.65rem', height: '0.65rem' }} />
+                <span>{stats.commissionTrend}%</span>
+              </>
             )}
           </div>
-          <h3 className="text-gray-600 text-sm">סך המכירות</h3>
-          <p className="text-2xl font-bold text-gray-900">₪{stats.totalSales.toLocaleString()}</p>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <Package className="w-10 h-10 text-blue-500 bg-blue-100 rounded-lg p-2" />
+
+        {/* Setup Fees */}
+        <div style={{
+          background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <Briefcase style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>דמי הקמה</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.totalSetupFees.toLocaleString()}</div>
+            </div>
           </div>
-          <h3 className="text-gray-600 text-sm">הזמנות</h3>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>סה"כ בתקופה</div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <BarChart3 className="w-10 h-10 text-purple-500 bg-purple-100 rounded-lg p-2" />
+
+        {/* Physical Products */}
+        <div style={{
+          background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <ShoppingBag style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>מוצרים פיזיים</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.totalPhysicalProducts.toLocaleString()}</div>
+            </div>
           </div>
-          <h3 className="text-gray-600 text-sm">כמות מוצרים</h3>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalQuantity}</p>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>סה"כ מכירות</div>
         </div>
-        
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <TrendingUp className="w-10 h-10 text-orange-500 bg-orange-100 rounded-lg p-2" />
+
+        {/* Digital Products */}
+        <div style={{
+          background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <Package style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>מוצרים דיגיטליים</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.totalDigitalProducts.toLocaleString()}</div>
+            </div>
           </div>
-          <h3 className="text-gray-600 text-sm">ממוצע הזמנה</h3>
-          <p className="text-2xl font-bold text-gray-900">₪{stats.avgOrderValue.toFixed(0)}</p>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>סה"כ מכירות</div>
+        </div>
+
+        {/* Total Sales */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <TrendingUp style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>סה"כ מכירות</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.totalSales.toLocaleString()}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>כולל כל הרכיבים</div>
+        </div>
+
+        {/* Average per Customer */}
+        <div style={{
+          background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <BarChart3 style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>ממוצע ללקוח</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>₪{stats.avgSalePerCustomer.toFixed(0)}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>ערך עסקה ממוצע</div>
+        </div>
+
+        {/* Pending Deals */}
+        <div style={{
+          background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+          borderRadius: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          padding: '1rem',
+          color: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <FileText style={{ width: '1.8rem', height: '1.8rem', opacity: 0.8 }} />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', opacity: 0.9, fontWeight: 500 }}>עסקאות ממתינות</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '0.25rem' }}>{stats.pendingDeals}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>ממתינים לסגירה</div>
         </div>
       </div>
 
-      {/* Report Tabs */}
-      <div className="bg-white rounded-lg shadow-sm mb-6">
-        <div className="border-b border-gray-200">
-          <div className="flex gap-8 px-6 pt-4">
-            <button
-              onClick={() => setReportType('summary')}
-              className={`pb-4 px-2 border-b-2 font-medium text-sm ${
-                reportType === 'summary'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              סיכום מכירות
-            </button>
-            {userRole === 'admin' && (
-              <button
-                onClick={() => setReportType('agents')}
-                className={`pb-4 px-2 border-b-2 font-medium text-sm ${
-                  reportType === 'agents'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                ביצועי סוכנים
-              </button>
-            )}
-            <button
-              onClick={() => setReportType('products')}
-              className={`pb-4 px-2 border-b-2 font-medium text-sm ${
-                reportType === 'products'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              ביצועי מוצרים
-            </button>
-            <button
-              onClick={() => setReportType('detailed')}
-              className={`pb-4 px-2 border-b-2 font-medium text-sm ${
-                reportType === 'detailed'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              דוח מפורט
-            </button>
-          </div>
+      {/* Detailed Transactions Table */}
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid #e5e7eb' }}>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#111827', margin: 0 }}>עסקאות מפורטות</h3>
         </div>
-
-        {/* Report Content */}
-        <div className="p-6">
-          {reportType === 'summary' && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold mb-4">סיכום פעילות</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Sales Chart Placeholder */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="text-sm font-medium text-gray-700 mb-4">מכירות לפי ימים</h4>
-                  <div className="h-48 flex items-center justify-center text-gray-400">
-                    <Activity className="w-8 h-8" />
-                    <span className="mr-2">גרף מכירות</span>
-                  </div>
-                </div>
-                
-                {/* Product Distribution */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="text-sm font-medium text-gray-700 mb-4">התפלגות מוצרים</h4>
-                  <div className="h-48 flex items-center justify-center text-gray-400">
-                    <PieChart className="w-8 h-8" />
-                    <span className="mr-2">גרף עוגה</span>
-                  </div>
-                </div>
-              </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ backgroundColor: '#f9fafb' }}>
+              <tr>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>תאריך</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>לקוח</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>עמלה</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>דמי הקמה</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>מוצרים פיזיים</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>מוצרים דיגיטליים</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>סה"כ</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 500, color: '#6b7280', textTransform: 'uppercase' }}>סטטוס</th>
+              </tr>
+            </thead>
+            <tbody style={{ backgroundColor: 'white' }}>
+              {filteredData.map((item) => (
+                <tr key={item.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#111827' }}>
+                    {new Date(item.date).toLocaleDateString('he-IL')}
+                  </td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>{item.customer}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#10b981' }}>₪{item.commission.toLocaleString()}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#111827' }}>₪{item.setupFee.toLocaleString()}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#111827' }}>₪{item.physicalProducts.toLocaleString()}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#111827' }}>₪{item.digitalProducts.toLocaleString()}</td>
+                  <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', fontWeight: 700, color: '#111827' }}>₪{item.totalSale.toLocaleString()}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>
+                    <span style={{
+                      padding: '0.25rem 0.75rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: '9999px',
+                      backgroundColor: item.status === 'completed' ? '#d1fae5' : '#fef3c7',
+                      color: item.status === 'completed' ? '#065f46' : '#92400e'
+                    }}>
+                      {item.status === 'completed' ? 'הושלם' : 'ממתין'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          {filteredData.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '3rem' }}>
+              <FileText style={{ margin: '0 auto', height: '3rem', width: '3rem', color: '#9ca3af' }} />
+              <h3 style={{ marginTop: '0.5rem', fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>אין נתונים להצגה</h3>
+              <p style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: '#6b7280' }}>לא נמצאו עסקאות בטווח התאריכים שנבחר</p>
             </div>
           )}
-
-          {reportType === 'agents' && userRole === 'admin' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">ביצועי סוכנים</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סוכן</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מכירות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">הזמנות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">כמות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ממוצע</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {agentPerformance.map((agent, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{agent.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₪{agent.sales.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{agent.orders}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{agent.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ₪{agent.orders > 0 ? (agent.sales / agent.orders).toFixed(0) : 0}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {reportType === 'products' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">ביצועי מוצרים</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מוצר</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מכירות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">כמות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ממוצע ליחידה</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {productPerformance.map((product, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₪{product.sales.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ₪{product.quantity > 0 ? (product.sales / product.quantity).toFixed(0) : 0}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {reportType === 'detailed' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">דוח מפורט</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">תאריך</th>
-                      {userRole === 'admin' && (
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סוכן</th>
-                      )}
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">לקוח</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מוצר</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">כמות</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סכום</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סטטוס</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">פעולות</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.date}</td>
-                        {userRole === 'admin' && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.agentName}</td>
-                        )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.customer}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.product}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₪{item.amount.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            item.status === 'completed'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {item.status === 'completed' ? 'הושלם' : 'ממתין'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button className="text-blue-600 hover:text-blue-900">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">פעולות מהירות</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
-            <FileText className="w-5 h-5 text-gray-600" />
-            <span>דוח חודשי</span>
-          </button>
-          <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
-            <BarChart3 className="w-5 h-5 text-gray-600" />
-            <span>ניתוח מגמות</span>
-          </button>
-          <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
-            <Users className="w-5 h-5 text-gray-600" />
-            <span>השוואת סוכנים</span>
-          </button>
         </div>
       </div>
     </div>

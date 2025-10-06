@@ -12,6 +12,7 @@ const supabase = createClient(
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,7 +30,20 @@ export default function DashboardPage() {
       }
 
       setUser(user);
-      console.log('User loaded:', user.email);
+      
+      // קבלת תפקיד המשתמש
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) {
+        setUserRole(profile.role);
+        console.log('User role from database:', profile.role);
+      }
+      
+      console.log('User loaded:', user.email, 'Role:', profile?.role);
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {
@@ -64,6 +78,9 @@ export default function DashboardPage() {
     );
   }
 
+  // תצוגה לסוכן מכירות
+  const isSalesAgent = userRole === 'SALES_AGENT';
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -87,7 +104,7 @@ export default function DashboardPage() {
             fontSize: '24px',
             color: '#333'
           }}>
-            🛒 לוח בקרה - מערכת ניהול הזמנות
+            {isSalesAgent ? '📊 לוח בקרה - סוכן מכירות' : '🛒 לוח בקרה - מערכת ניהול הזמנות'}
           </h1>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -117,208 +134,353 @@ export default function DashboardPage() {
         margin: '40px auto',
         padding: '0 20px'
       }}>
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '30px',
-          marginBottom: '30px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <h2 style={{ 
-            fontSize: '28px',
-            marginBottom: '10px',
-            color: '#333'
-          }}>
-            ברוך הבא למערכת! 👋
-          </h2>
-          <p style={{ 
-            fontSize: '16px',
-            color: '#666'
-          }}>
-            התחברת בהצלחה למערכת ניהול ההזמנות של Kiosk
-          </p>
-        </div>
+        {isSalesAgent ? (
+          // תצוגה לסוכן מכירות
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '20px',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #FF9800'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>הזמנות פתוחות</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>הזמנות הממתינות לטיפול</p>
+              </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '20px',
-          marginBottom: '30px'
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #4CAF50'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📦</div>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>הזמנות</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>0</p>
-            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>סה״כ הזמנות במערכת</p>
-          </div>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #2196F3'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🎯</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>סה״כ לידים</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>לידים פעילים</p>
+              </div>
 
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #2196F3'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>👥</div>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>לקוחות</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3', margin: 0 }}>0</p>
-            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>לקוחות פעילים</p>
-          </div>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #4CAF50'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>✅</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>סגירות החודש</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>עסקאות שנסגרו החודש</p>
+              </div>
 
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #FF9800'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>🚚</div>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>ספקים</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800', margin: 0 }}>0</p>
-            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>ספקים במערכת</p>
-          </div>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #9C27B0'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🏆</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>עמידה ביעדים</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0', margin: 0 }}>0%</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>יעד חודשי</p>
+              </div>
+            </div>
 
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '25px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderRight: '4px solid #9C27B0'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
-            <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>מוצרים</h3>
-            <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0', margin: 0 }}>0</p>
-            <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>מוצרים בקטלוג</p>
-          </div>
-        </div>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '30px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <h3 style={{ 
+                fontSize: '20px',
+                marginBottom: '20px',
+                color: '#333'
+              }}>
+                פעולות מהירות
+              </h3>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '15px'
+              }}>
+                <button 
+                  onClick={() => navigateTo('/orders/create')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
+                >
+                  ➕ הזמנה חדשה
+                </button>
 
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '30px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <h3 style={{ 
-            fontSize: '20px',
-            marginBottom: '20px',
-            color: '#333'
-          }}>
-            פעולות מהירות
-          </h3>
-          
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '15px'
-          }}>
-            <button 
-              onClick={() => navigateTo('/orders/create')}
-              style={{
-                padding: '15px',
-                backgroundColor: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
-            >
-              ➕ הזמנה חדשה
-            </button>
+                <button 
+                  onClick={() => alert('ניהול לידים - בפיתוח')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  🎯 ניהול לידים
+                </button>
+                
+                <button 
+                  onClick={() => navigateTo('/orders')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#FF9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  📋 ההזמנות שלי
+                </button>
+                
+                <button 
+                  onClick={() => navigateTo('/reports')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#9C27B0',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  📊 דוחות מכירות
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          // תצוגה רגילה למשתמשים אחרים
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '20px',
+              marginBottom: '30px'
+            }}>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #4CAF50'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📦</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>הזמנות</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#4CAF50', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>סה״כ הזמנות במערכת</p>
+              </div>
 
-            <button 
-              onClick={() => navigateTo('/products')}
-              style={{
-                padding: '15px',
-                backgroundColor: '#FF5722',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#E64A19'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FF5722'}
-            >
-              📦 ניהול מוצרים
-            </button>
-            
-            <button 
-              onClick={() => alert('ניהול לקוחות - בפיתוח')}
-              style={{
-                padding: '15px',
-                backgroundColor: '#2196F3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              👤 לקוח חדש
-            </button>
-            
-            <button 
-              onClick={() => alert('דוחות - בפיתוח')}
-              style={{
-                padding: '15px',
-                backgroundColor: '#FF9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              📊 דוחות
-            </button>
-            
-            <button 
-              onClick={() => alert('הגדרות - בפיתוח')}
-              style={{
-                padding: '15px',
-                backgroundColor: '#9C27B0',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              ⚙️ הגדרות
-            </button>
-          </div>
-        </div>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #2196F3'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>👥</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>לקוחות</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#2196F3', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>לקוחות פעילים</p>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #FF9800'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🚚</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>ספקים</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF9800', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>ספקים במערכת</p>
+              </div>
+
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '25px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                borderRight: '4px solid #9C27B0'
+              }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
+                <h3 style={{ fontSize: '18px', marginBottom: '10px', color: '#333' }}>מוצרים</h3>
+                <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#9C27B0', margin: 0 }}>0</p>
+                <p style={{ fontSize: '14px', color: '#999', marginTop: '5px' }}>מוצרים בקטלוג</p>
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '30px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <h3 style={{ 
+                fontSize: '20px',
+                marginBottom: '20px',
+                color: '#333'
+              }}>
+                פעולות מהירות
+              </h3>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '15px'
+              }}>
+                <button 
+                  onClick={() => navigateTo('/orders/create')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#45a049'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4CAF50'}
+                >
+                  ➕ הזמנה חדשה
+                </button>
+
+                <button 
+                  onClick={() => navigateTo('/products')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#FF5722',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#E64A19'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FF5722'}
+                >
+                  📦 ניהול מוצרים
+                </button>
+                
+                <button 
+                  onClick={() => alert('ניהול לקוחות - בפיתוח')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  👤 לקוח חדש
+                </button>
+                
+                <button 
+                  onClick={() => alert('דוחות - בפיתוח')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#FF9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  📊 דוחות
+                </button>
+                
+                <button 
+                  onClick={() => alert('הגדרות - בפיתוח')}
+                  style={{
+                    padding: '15px',
+                    backgroundColor: '#9C27B0',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  ⚙️ הגדרות
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

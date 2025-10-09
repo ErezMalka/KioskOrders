@@ -1,26 +1,13 @@
 // app/settings/fields/page.tsx
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import CustomFieldsManager from '../../components/CustomFieldsManager'
 import { ArrowLeft, Database, Info, Shield } from 'lucide-react'
 import Link from 'next/link'
-import { supabase } from '../../../lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
 export default function FieldsSettingsPage() {
   const router = useRouter()
-
-  useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      router.push('/login')
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -1,630 +1,719 @@
-import { useState, useEffect } from 'react'
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface NewCustomerFormProps {
-  onSubmit: (customerData: any) => void
-  onCancel: () => void
-  initialData?: CustomerFormData
-  isEdit?: boolean
-  allowCustomFields?: boolean
+  initialData?: any;
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+  isEdit?: boolean;
+  allowCustomFields?: boolean;
 }
 
-interface CustomerFormData {
-  name: string
-  phone: string
-  email: string
-  legal_id: string
-  contact_name: string
-  address: string
-  notes: string
-  [key: string]: any
-}
-
-interface CustomField {
-  id: string
-  label: string
-  value: string
-}
-
-export default function NewCustomerForm({ 
-  onSubmit, 
-  onCancel, 
-  initialData, 
+export default function NewCustomerForm({
+  initialData = {},
+  onSubmit,
+  onCancel,
   isEdit = false,
   allowCustomFields = false
 }: NewCustomerFormProps) {
-  const [formData, setFormData] = useState<CustomerFormData>(
-    initialData || {
-      name: '',
-      phone: '',
-      email: '',
-      legal_id: '',
-      contact_name: '',
-      address: '',
-      notes: ''
-    }
-  )
+  // Form state - שדות בסיסיים
+  const [formData, setFormData] = useState({
+    name: initialData.name || '',
+    email: initialData.email || '',
+    phone: initialData.phone || '',
+    legal_id: initialData.legal_id || '',
+    contact_name: initialData.contact_name || '',
+    address: initialData.address || '',
+    notes: initialData.notes || '',
+    // שדות חדשים
+    status_id: initialData.status_id || '',
+    brand_id: initialData.brand_id || '',
+    pos_vendor_id: initialData.pos_vendor_id || '',
+    region: initialData.region || '',
+    branch_admin_code: initialData.branch_admin_code || '',
+    brand_admin_code: initialData.brand_admin_code || '',
+    brand_display_name: initialData.brand_display_name || '',
+    invoice_business_name: initialData.invoice_business_name || '',
+    vat_number: initialData.vat_number || '',
+    owner_id_number: initialData.owner_id_number || '',
+    branch_phone: initialData.branch_phone || '',
+    manager_mobile: initialData.manager_mobile || '',
+    payment_mandate_url: initialData.payment_mandate_url || '',
+    accounting_notes: initialData.accounting_notes || ''
+  });
 
-  const [customFields, setCustomFields] = useState<CustomField[]>([])
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
+  // States for dropdown options
+  const [statuses, setStatuses] = useState<any[]>([]);
+  const [brands, setBrands] = useState<any[]>([]);
+  const [posVendors, setPosVendors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('basic');
 
   useEffect(() => {
-    if (initialData) {
-      setFormData(initialData)
+    loadDropdownData();
+  }, []);
+
+  const loadDropdownData = async () => {
+    try {
+      // טוען סטטוסים
+      const { data: statusData } = await supabase
+        .from('statuses')
+        .select('*')
+        .order('name');
       
-      // טעינת שדות מותאמים אישית בעת עריכה
-      if (allowCustomFields) {
-        const loadedCustomFields: CustomField[] = []
-        
-        // אם יש custom_fields כאובייקט נפרד
-        if (initialData.custom_fields && typeof initialData.custom_fields === 'object') {
-          Object.entries(initialData.custom_fields).forEach(([key, fieldData]: [string, any]) => {
-            loadedCustomFields.push({
-              id: key,
-              label: fieldData.label || '',
-              value: fieldData.value || ''
-            })
-          })
-        } 
-        // או אם השדות המותאמים נשמרו ישירות על האובייקט
-        else {
-          Object.keys(initialData).forEach(key => {
-            if (key.startsWith('custom_')) {
-              const fieldValue = initialData[key]
-              if (typeof fieldValue === 'object' && fieldValue.label) {
-                loadedCustomFields.push({
-                  id: key,
-                  label: fieldValue.label,
-                  value: fieldValue.value || ''
-                })
-              }
-            }
-          })
-        }
-        
-        setCustomFields(loadedCustomFields)
-      }
+      // טוען מותגים
+      const { data: brandData } = await supabase
+        .from('brands')
+        .select('*')
+        .order('name');
+      
+      // טוען ספקי POS
+      const { data: posData } = await supabase
+        .from('pos_vendors')
+        .select('*')
+        .order('name');
+
+      setStatuses(statusData || []);
+      setBrands(brandData || []);
+      setPosVendors(posData || []);
+    } catch (error) {
+      console.error('Error loading dropdown data:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [initialData, allowCustomFields])
-
-  const addCustomField = () => {
-    const newField: CustomField = {
-      id: `custom_${Date.now()}`,
-      label: '',
-      value: ''
-    }
-    setCustomFields([...customFields, newField])
-  }
-
-  const removeCustomField = (id: string) => {
-    setCustomFields(customFields.filter(field => field.id !== id))
-    const newFormData = { ...formData }
-    delete newFormData[id]
-    setFormData(newFormData)
-  }
-
-  const updateCustomField = (id: string, label: string, value: string) => {
-    setCustomFields(customFields.map(field => 
-      field.id === id ? { ...field, label, value } : field
-    ))
-    setFormData({ ...formData, [id]: value })
-  }
-
-  const validateForm = () => {
-    const newErrors: { [key: string]: string } = {}
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'שם הלקוח הוא שדה חובה'
-    }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'מספר טלפון הוא שדה חובה'
-    } else if (!/^[\d\-\+\s()]+$/.test(formData.phone)) {
-      newErrors.phone = 'מספר טלפון לא תקין'
-    }
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'כתובת אימייל לא תקינה'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     
-    if (validateForm()) {
-      const standardFields = {
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        legal_id: formData.legal_id,
-        contact_name: formData.contact_name,
-        address: formData.address,
-        notes: formData.notes
+    // מסנן שדות ריקים
+    const dataToSubmit = Object.entries(formData).reduce((acc, [key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) {
+        acc[key] = value;
       }
+      return acc;
+    }, {} as any);
 
-      // רק אם allowCustomFields = true ויש שדות מותאמים
-      const customFieldsData: { [key: string]: { label: string; value: string } } = {}
-      if (allowCustomFields) {
-        customFields.forEach(field => {
-          if (field.label.trim()) {
-            customFieldsData[field.id] = {
-              label: field.label,
-              value: field.value
-            }
-          }
-        })
-      }
+    onSubmit(dataToSubmit);
+  };
 
-      const finalData = {
-        ...standardFields,
-        custom_fields: Object.keys(customFieldsData).length > 0 ? customFieldsData : null
-      }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
-      onSubmit(finalData)
-    }
-  }
+  const regions = [
+    'צפון',
+    'חיפה',
+    'מרכז',
+    'תל אביב',
+    'ירושלים',
+    'דרום',
+    'יהודה ושומרון'
+  ];
 
-  const handleInputChange = (field: keyof CustomerFormData, value: string) => {
-    setFormData({ ...formData, [field]: value })
-    if (errors[field]) {
-      setErrors({ ...errors, [field]: '' })
-    }
+  if (loading) {
+    return (
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '40px',
+        textAlign: 'center'
+      }}>
+        <div>טוען נתונים...</div>
+      </div>
+    );
   }
 
   return (
-    <div style={{
+    <form onSubmit={handleSubmit} style={{
       backgroundColor: 'white',
+      borderRadius: '8px',
       padding: '30px',
-      borderRadius: '12px',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+      maxHeight: '80vh',
+      overflow: 'auto',
+      direction: 'rtl'
     }}>
-      <h3 style={{ 
-        marginBottom: '25px', 
-        fontSize: '22px',
-        color: '#333',
-        fontWeight: '600'
+      <h2 style={{ marginBottom: '25px', fontSize: '24px', fontWeight: 'bold' }}>
+        {isEdit ? 'עריכת לקוח' : 'הוספת לקוח חדש'}
+      </h2>
+
+      {/* Tabs */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '2px solid #e0e0e0',
+        marginBottom: '20px',
+        gap: '10px'
       }}>
-        {isEdit ? 'עריכת פרטי לקוח' : 'פרטי לקוח חדש'}
-      </h3>
-      
-      <form onSubmit={handleSubmit}>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '1fr 1fr', 
-          gap: '20px', 
-          marginBottom: '25px' 
-        }}>
-          {/* שם הלקוח */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              שם הלקוח <span style={{ color: '#dc3545' }}>*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="שם הלקוח"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: `2px solid ${errors.name ? '#dc3545' : '#ddd'}`,
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => {
-                if (!errors.name) e.currentTarget.style.borderColor = '#4CAF50'
-              }}
-              onBlur={(e) => {
-                if (!errors.name) e.currentTarget.style.borderColor = '#ddd'
-              }}
-            />
-            {errors.name && (
-              <span style={{ 
-                display: 'block',
-                marginTop: '5px',
-                fontSize: '13px', 
-                color: '#dc3545' 
-              }}>
-                {errors.name}
-              </span>
-            )}
-          </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('basic')}
+          style={{
+            padding: '10px 20px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'basic' ? '3px solid #007bff' : 'none',
+            color: activeTab === 'basic' ? '#007bff' : '#666',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'basic' ? 'bold' : 'normal'
+          }}
+        >
+          פרטים בסיסיים
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('business')}
+          style={{
+            padding: '10px 20px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'business' ? '3px solid #007bff' : 'none',
+            color: activeTab === 'business' ? '#007bff' : '#666',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'business' ? 'bold' : 'normal'
+          }}
+        >
+          פרטים עסקיים
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('technical')}
+          style={{
+            padding: '10px 20px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'technical' ? '3px solid #007bff' : 'none',
+            color: activeTab === 'technical' ? '#007bff' : '#666',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: activeTab === 'technical' ? 'bold' : 'normal'
+          }}
+        >
+          פרטים טכניים
+        </button>
+      </div>
 
-          {/* טלפון */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              טלפון <span style={{ color: '#dc3545' }}>*</span>
-            </label>
-            <input
-              type="tel"
-              placeholder="050-1234567"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: `2px solid ${errors.phone ? '#dc3545' : '#ddd'}`,
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => {
-                if (!errors.phone) e.currentTarget.style.borderColor = '#4CAF50'
-              }}
-              onBlur={(e) => {
-                if (!errors.phone) e.currentTarget.style.borderColor = '#ddd'
-              }}
-            />
-            {errors.phone && (
-              <span style={{ 
-                display: 'block',
-                marginTop: '5px',
-                fontSize: '13px', 
-                color: '#dc3545' 
-              }}>
-                {errors.phone}
-              </span>
-            )}
-          </div>
-
-          {/* אימייל */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              אימייל
-            </label>
-            <input
-              type="email"
-              placeholder="email@example.com"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: `2px solid ${errors.email ? '#dc3545' : '#ddd'}`,
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => {
-                if (!errors.email) e.currentTarget.style.borderColor = '#4CAF50'
-              }}
-              onBlur={(e) => {
-                if (!errors.email) e.currentTarget.style.borderColor = '#ddd'
-              }}
-            />
-            {errors.email && (
-              <span style={{ 
-                display: 'block',
-                marginTop: '5px',
-                fontSize: '13px', 
-                color: '#dc3545' 
-              }}>
-                {errors.email}
-              </span>
-            )}
-          </div>
-
-          {/* ח.פ / ת.ז */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              ח.פ / ת.ז
-            </label>
-            <input
-              type="text"
-              placeholder="123456789"
-              value={formData.legal_id}
-              onChange={(e) => handleInputChange('legal_id', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: '2px solid #ddd',
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
-            />
-          </div>
-
-          {/* שם איש קשר */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              שם איש קשר
-            </label>
-            <input
-              type="text"
-              placeholder="שם איש קשר"
-              value={formData.contact_name}
-              onChange={(e) => handleInputChange('contact_name', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: '2px solid #ddd',
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
-            />
-          </div>
-
-          {/* כתובת */}
-          <div>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              כתובת
-            </label>
-            <input
-              type="text"
-              placeholder="רחוב, עיר"
-              value={formData.address}
-              onChange={(e) => handleInputChange('address', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: '2px solid #ddd',
-                boxSizing: 'border-box',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
-            />
-          </div>
-
-          {/* הערות */}
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#333'
-            }}>
-              הערות
-            </label>
-            <textarea
-              placeholder="הערות נוספות..."
-              value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                borderRadius: '8px',
-                border: '2px solid #ddd',
-                minHeight: '100px',
-                resize: 'vertical',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = '#4CAF50'}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#ddd'}
-            />
-          </div>
-
-          {/* שדות מותאמים אישית - רק אם allowCustomFields = true */}
-          {allowCustomFields && customFields.map((field) => (
-            <div key={field.id} style={{ gridColumn: 'span 2' }}>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: '200px 1fr auto', 
-                gap: '10px',
-                alignItems: 'end'
-              }}>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#333'
-                  }}>
-                    שם השדה
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="לדוגמה: מספר פקס"
-                    value={field.label}
-                    onChange={(e) => updateCustomField(field.id, e.target.value, field.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      fontSize: '16px',
-                      borderRadius: '8px',
-                      border: '2px solid #ddd',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#333'
-                  }}>
-                    ערך
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ערך השדה..."
-                    value={field.value}
-                    onChange={(e) => updateCustomField(field.id, field.label, e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      fontSize: '16px',
-                      borderRadius: '8px',
-                      border: '2px solid #ddd',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeCustomField(field.id)}
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#dc3545',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    fontWeight: 'bold'
-                  }}
-                  title="הסר שדה"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {/* כפתור הוספת שדה - רק אם allowCustomFields = true */}
-          {allowCustomFields && (
-            <div style={{ gridColumn: 'span 2' }}>
-              <button
-                type="button"
-                onClick={addCustomField}
+      {/* Basic Tab */}
+      {activeTab === 'basic' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            {/* שם */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                שם הלקוח *
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#2196F3',
-                  color: 'white',
-                  border: '2px dashed #2196F3',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.3s'
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#1976D2'
-                  e.currentTarget.style.borderColor = '#1976D2'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#2196F3'
-                  e.currentTarget.style.borderColor = '#2196F3'
+              />
+            </div>
+
+            {/* סטטוס */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                סטטוס
+              </label>
+              <select
+                name="status_id"
+                value={formData.status_id}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  backgroundColor: 'white'
                 }}
               >
-                <span style={{ fontSize: '18px' }}>+</span>
-                הוסף שדה מותאם אישית
-              </button>
+                <option value="">בחר סטטוס</option>
+                {statuses.map(status => (
+                  <option key={status.id} value={status.id}>
+                    {status.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
-        </div>
 
-        {/* כפתורים */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '25px' }}>
-          <button
-            type="submit"
-            style={{
-              padding: '14px 32px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              transition: 'all 0.3s',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#45a049'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#4CAF50'
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            {isEdit ? '✓ עדכן לקוח' : '✓ צור לקוח'}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{
-              padding: '14px 32px',
-              backgroundColor: '#757575',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              transition: 'all 0.3s',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#616161'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#757575'
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            ✕ ביטול
-          </button>
+            {/* אימייל */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                אימייל
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* טלפון */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                טלפון
+              </label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* איש קשר */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                שם איש קשר
+              </label>
+              <input
+                type="text"
+                name="contact_name"
+                value={formData.contact_name}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* נייד מנהל */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                נייד מנהל
+              </label>
+              <input
+                type="tel"
+                name="manager_mobile"
+                value={formData.manager_mobile}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* כתובת */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                כתובת
+              </label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* אזור */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                אזור
+              </label>
+              <select
+                name="region"
+                value={formData.region}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="">בחר אזור</option>
+                {regions.map(region => (
+                  <option key={region} value={region}>{region}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* טלפון סניף */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                טלפון סניף
+              </label>
+              <input
+                type="tel"
+                name="branch_phone"
+                value={formData.branch_phone}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* הערות */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                הערות כלליות
+              </label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+          </div>
         </div>
-      </form>
-    </div>
-  )
+      )}
+
+      {/* Business Tab */}
+      {activeTab === 'business' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            {/* ח.פ/ע.מ */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                ח.פ / עוסק מורשה
+              </label>
+              <input
+                type="text"
+                name="legal_id"
+                value={formData.legal_id}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* מספר עוסק */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                מספר עוסק (VAT)
+              </label>
+              <input
+                type="text"
+                name="vat_number"
+                value={formData.vat_number}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* שם לחשבונית */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                שם עסק לחשבונית
+              </label>
+              <input
+                type="text"
+                name="invoice_business_name"
+                value={formData.invoice_business_name}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* ת.ז בעלים */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                ת.ז בעלים
+              </label>
+              <input
+                type="text"
+                name="owner_id_number"
+                value={formData.owner_id_number}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* מותג */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                מותג
+              </label>
+              <select
+                name="brand_id"
+                value={formData.brand_id}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="">בחר מותג</option>
+                {brands.map(brand => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* שם תצוגה מותג */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                שם תצוגה של המותג
+              </label>
+              <input
+                type="text"
+                name="brand_display_name"
+                value={formData.brand_display_name}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* קישור הרשאת תשלום */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                קישור להרשאת תשלום
+              </label>
+              <input
+                type="url"
+                name="payment_mandate_url"
+                value={formData.payment_mandate_url}
+                onChange={handleChange}
+                placeholder="https://..."
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  direction: 'ltr'
+                }}
+              />
+            </div>
+
+            {/* הערות הנהח"ש */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                הערות להנהלת חשבונות
+              </label>
+              <textarea
+                name="accounting_notes"
+                value={formData.accounting_notes}
+                onChange={handleChange}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Technical Tab */}
+      {activeTab === 'technical' && (
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            {/* ספק POS */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                ספק קופה (POS)
+              </label>
+              <select
+                name="pos_vendor_id"
+                value={formData.pos_vendor_id}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value="">בחר ספק קופה</option>
+                {posVendors.map(vendor => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* קוד מנהל סניף */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                קוד מנהל סניף
+              </label>
+              <input
+                type="text"
+                name="branch_admin_code"
+                value={formData.branch_admin_code}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            {/* קוד מנהל מותג */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>
+                קוד מנהל מותג
+              </label>
+              <input
+                type="text"
+                name="brand_admin_code"
+                value={formData.brand_admin_code}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Buttons */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '10px',
+        marginTop: '25px',
+        paddingTop: '20px',
+        borderTop: '1px solid #e0e0e0'
+      }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          ביטול
+        </button>
+        <button
+          type="submit"
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: 'bold'
+          }}
+        >
+          {isEdit ? 'עדכן לקוח' : 'הוסף לקוח'}
+        </button>
+      </div>
+    </form>
+  );
 }

@@ -20,7 +20,10 @@ function getSupabase() {
 
 const supabase = getSupabase();
 
-// Types
+// Fixed org_id
+const FIXED_ORG_ID = '11111111-1111-1111-1111-111111111111';
+
+// Updated Types to match customers_overview
 interface Customer {
   id: string;
   org_id: string;
@@ -33,6 +36,33 @@ interface Customer {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  // New fields from customers_overview
+  brand_id?: string;
+  status_id?: string;
+  region?: string;
+  branch_admin_code?: string;
+  brand_admin_code?: string;
+  brand_display_name?: string;
+  invoice_business_name?: string;
+  vat_number?: string;
+  owner_id_number?: string;
+  branch_phone?: string;
+  manager_mobile?: string;
+  pos_vendor_id?: string;
+  payment_mandate_url?: string;
+  accounting_notes?: string;
+  // Joined fields from VIEW
+  status_name?: string;
+  status_color?: string;
+  brand_name?: string;
+  pos_vendor_name?: string;
+  // Aggregated counts
+  products_count?: number;
+  emails_count?: number;
+  hardware_count?: number;
+  billing_lines_count?: number;
+  monthly_billing_total?: string;
+  one_time_billing_total?: string;
 }
 
 export default function CustomersPage() {
@@ -44,7 +74,6 @@ export default function CustomersPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [userOrgId, setUserOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -71,10 +100,11 @@ export default function CustomersPage() {
 
   const loadCustomers = async () => {
     try {
-      console.log('Loading all customers');
+      console.log('Loading customers from customers_overview');
 
+      // טוען מ-customers_overview במקום מ-customers
       const { data, error } = await supabase
-        .from('customers')
+        .from('customers_overview')
         .select('*')
         .order('name');
 
@@ -86,15 +116,8 @@ export default function CustomersPage() {
         return;
       }
 
-      console.log('Customers loaded:', data);
+      console.log('Customers loaded:', data?.length, 'customers');
       setCustomers(data || []);
-
-      if (data && data.length > 0 && data[0].org_id) {
-        setUserOrgId(data[0].org_id);
-        console.log('Set org_id from first customer:', data[0].org_id);
-      } else {
-        console.warn('No customers found or no org_id');
-      }
 
     } catch (error) {
       console.error('Error:', error);
@@ -104,16 +127,11 @@ export default function CustomersPage() {
   const handleAddCustomer = async (customerData: any) => {
     setError(null);
 
-    if (!userOrgId) {
-      setError('שגיאה: לא נמצא מזהה ארגון');
-      return;
-    }
-
     try {
       const { data, error } = await supabase
         .from('customers')
         .insert([{
-          org_id: userOrgId,
+          org_id: FIXED_ORG_ID, // משתמש ב-org_id קבוע
           ...customerData
         }])
         .select();
@@ -125,6 +143,18 @@ export default function CustomersPage() {
       }
 
       console.log('Customer added successfully:', data);
+      
+      // אם יש status_id, הוסף להיסטוריית סטטוסים
+      if (data && data[0] && customerData.status_id) {
+        await supabase
+          .from('customer_status_history')
+          .insert([{
+            customer_id: data[0].id,
+            status_id: customerData.status_id,
+            note: 'סטטוס ראשוני'
+          }]);
+      }
+      
       setShowAddModal(false);
       await loadCustomers();
       alert('הלקוח נוסף בהצלחה!');
@@ -155,6 +185,18 @@ export default function CustomersPage() {
       }
 
       console.log('Customer updated successfully:', data);
+      
+      // אם הסטטוס השתנה, הוסף להיסטוריה
+      if (customerData.status_id && customerData.status_id !== selectedCustomer.status_id) {
+        await supabase
+          .from('customer_status_history')
+          .insert([{
+            customer_id: selectedCustomer.id,
+            status_id: customerData.status_id,
+            note: 'עדכון סטטוס'
+          }]);
+      }
+      
       setShowEditModal(false);
       setSelectedCustomer(null);
       await loadCustomers();
@@ -202,7 +244,9 @@ export default function CustomersPage() {
         (customer.name && customer.name.toLowerCase().includes(search)) ||
         (customer.email && customer.email.toLowerCase().includes(search)) ||
         (customer.phone && customer.phone.includes(searchTerm)) ||
-        (customer.address && customer.address.toLowerCase().includes(search))
+        (customer.address && customer.address.toLowerCase().includes(search)) ||
+        (customer.legal_id && customer.legal_id.includes(searchTerm)) ||
+        (customer.contact_name && customer.contact_name.toLowerCase().includes(search))
       );
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'he'));
@@ -306,14 +350,14 @@ export default function CustomersPage() {
         }}>
           <input
             type="text"
-            placeholder="חיפוש לפי שם, אימייל, טלפון או כתובת..."
+            placeholder="חיפוש לפי שם, אימייל, טלפון, ח.פ, איש קשר או כתובת..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '5px',
-              width: '400px',
+              width: '450px',
               fontSize: '16px'
             }}
           />
@@ -392,9 +436,11 @@ export default function CustomersPage() {
             <thead>
               <tr style={{ backgroundColor: '#f8f9fa' }}>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>שם</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>סטטוס</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>אימייל</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>טלפון</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>כתובת</th>
+                <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>ח.פ/ע.מ</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>תאריך הוספה</th>
                 <th style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>פעולות</th>
               </tr>
@@ -409,10 +455,34 @@ export default function CustomersPage() {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    <td style={{ padding: '15px', fontWeight: '500' }}>{customer.name}</td>
-                    <td style={{ padding: '15px' }}>{customer.email}</td>
-                    <td style={{ padding: '15px', direction: 'ltr', textAlign: 'right' }}>{customer.phone}</td>
+                    <td style={{ padding: '15px', fontWeight: '500' }}>
+                      {customer.name}
+                      {customer.brand_name && (
+                        <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                          מותג: {customer.brand_name}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '15px' }}>
+                      {customer.status_name ? (
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: customer.status_color || '#e0e0e0',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}>
+                          {customer.status_name}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#999' }}>-</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '15px' }}>{customer.email || '-'}</td>
+                    <td style={{ padding: '15px', direction: 'ltr', textAlign: 'right' }}>{customer.phone || '-'}</td>
                     <td style={{ padding: '15px' }}>{customer.address || '-'}</td>
+                    <td style={{ padding: '15px' }}>{customer.legal_id || '-'}</td>
                     <td style={{ padding: '15px', color: '#666' }}>
                       {new Date(customer.created_at).toLocaleDateString('he-IL')}
                     </td>
@@ -482,6 +552,31 @@ export default function CustomersPage() {
             </div>
           )}
         </div>
+
+        {/* Debug Button - הסר אחרי שהכל עובד */}
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            onClick={async () => {
+              const { data, error } = await supabase
+                .from('customers_overview')
+                .select('*');
+              console.log('Debug - Customers Data:', data);
+              console.log('Debug - Error:', error);
+              alert(`נמצאו ${data?.length || 0} לקוחות. בדוק את הקונסול לפרטים.`);
+            }}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              opacity: 0.5
+            }}
+          >
+            🔧 בדיקת חיבור לנתונים
+          </button>
+        </div>
       </main>
 
       {/* Add Modal */}
@@ -508,7 +603,6 @@ export default function CustomersPage() {
                 setError(null);
               }}
               allowCustomFields={true}
-
             />
           </div>
         </div>
@@ -535,11 +629,26 @@ export default function CustomersPage() {
               initialData={{
                 name: selectedCustomer.name,
                 email: selectedCustomer.email || '',
-                phone: selectedCustomer.phone,
+                phone: selectedCustomer.phone || '',
                 legal_id: selectedCustomer.legal_id || '',
                 contact_name: selectedCustomer.contact_name || '',
                 address: selectedCustomer.address || '',
-                notes: selectedCustomer.notes || ''
+                notes: selectedCustomer.notes || '',
+                // שדות חדשים
+                status_id: selectedCustomer.status_id || '',
+                brand_id: selectedCustomer.brand_id || '',
+                pos_vendor_id: selectedCustomer.pos_vendor_id || '',
+                region: selectedCustomer.region || '',
+                branch_admin_code: selectedCustomer.branch_admin_code || '',
+                brand_admin_code: selectedCustomer.brand_admin_code || '',
+                brand_display_name: selectedCustomer.brand_display_name || '',
+                invoice_business_name: selectedCustomer.invoice_business_name || '',
+                vat_number: selectedCustomer.vat_number || '',
+                owner_id_number: selectedCustomer.owner_id_number || '',
+                branch_phone: selectedCustomer.branch_phone || '',
+                manager_mobile: selectedCustomer.manager_mobile || '',
+                payment_mandate_url: selectedCustomer.payment_mandate_url || '',
+                accounting_notes: selectedCustomer.accounting_notes || ''
               }}
               onSubmit={handleEditCustomer}
               onCancel={() => {

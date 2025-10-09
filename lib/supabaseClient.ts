@@ -72,7 +72,7 @@ export interface PaymentPlan {
 // Updated Customer Management System Types
 // =====================================================
 
-// Customer - מעודכן עם כל השדות החדשים
+// Customer - מעודכן עם כל השדות החדשים + שדות דינמיים
 export interface Customer {
   id: string;
   org_id: string; // שינוי מ-organization_id
@@ -100,6 +100,8 @@ export interface Customer {
   pos_vendor_id?: string | null;
   payment_mandate_url?: string | null;
   accounting_notes?: string | null;
+  // שדות דינמיים - חדש!
+  custom_fields?: Record<string, any> | null;
 }
 
 // Product - מעודכן למערכת החדשה
@@ -257,3 +259,282 @@ export interface CustomerOverview extends Customer {
   monthly_billing_total: number;
   one_time_billing_total: number;
 }
+
+// =====================================================
+// Dynamic Fields System Types (חדש!)
+// =====================================================
+
+export type FieldType = 
+  | 'text' 
+  | 'number' 
+  | 'date' 
+  | 'boolean' 
+  | 'select' 
+  | 'multiselect' 
+  | 'email' 
+  | 'phone' 
+  | 'url' 
+  | 'textarea' 
+  | 'currency';
+
+export type FieldCategory = 
+  | 'general'
+  | 'financial'
+  | 'legal'
+  | 'project'
+  | 'sales'
+  | 'technical'
+  | 'marketing';
+
+export interface FieldDefinition {
+  id: string;
+  org_id: string;
+  field_name: string;
+  display_name: string;
+  field_type: FieldType;
+  field_category: FieldCategory;
+  options?: { options: string[] } | null;
+  validation_rules?: {
+    minLength?: number;
+    maxLength?: number;
+    min?: number;
+    max?: number;
+    required?: boolean;
+    pattern?: string;
+  } | null;
+  default_value?: string | null;
+  is_required: boolean;
+  is_searchable: boolean;
+  is_visible: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+}
+
+export interface CustomFieldsAudit {
+  id: string;
+  customer_id: string;
+  field_name: string;
+  old_value?: any;
+  new_value?: any;
+  changed_by?: string | null;
+  changed_at: string;
+  change_type: 'create' | 'update' | 'delete';
+}
+
+export interface CustomFieldStats {
+  total_fields: number;
+  fields_by_category: Record<string, number>;
+  fields_by_type: Record<string, number>;
+  most_used_fields?: Array<{
+    field_name: string;
+    display_name: string;
+    usage_count: number;
+    usage_percentage: number;
+  }> | null;
+  unused_fields?: string[] | null;
+}
+
+// =====================================================
+// Helper Functions for Dynamic Fields (חדש!)
+// =====================================================
+
+export const customFieldsHelpers = {
+  // עדכון שדה דינמי בודד
+  async updateCustomField(
+    customerId: string,
+    fieldName: string,
+    fieldValue: any,
+    userId?: string
+  ) {
+    const { data, error } = await supabase
+      .rpc('update_custom_field', {
+        p_customer_id: customerId,
+        p_field_name: fieldName,
+        p_field_value: JSON.stringify(fieldValue),
+        p_user_id: userId
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // עדכון מרובה של שדות
+  async updateMultipleCustomFields(
+    customerId: string,
+    fields: Record<string, any>,
+    userId?: string
+  ) {
+    const { data, error } = await supabase
+      .rpc('update_multiple_custom_fields', {
+        p_customer_id: customerId,
+        p_fields: fields,
+        p_user_id: userId
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // מחיקת שדה דינמי
+  async deleteCustomField(
+    customerId: string,
+    fieldName: string,
+    userId?: string
+  ) {
+    const { data, error } = await supabase
+      .rpc('delete_custom_field', {
+        p_customer_id: customerId,
+        p_field_name: fieldName,
+        p_user_id: userId
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // חיפוש בשדות דינמיים
+  async searchCustomFields(searchTerm: string, orgId?: string) {
+    const { data, error } = await supabase
+      .rpc('search_custom_fields', {
+        p_search_term: searchTerm,
+        p_org_id: orgId || '11111111-1111-1111-1111-111111111111'
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // קבלת שדות דינמיים של לקוח
+  async getCustomerCustomFields(customerId: string) {
+    const { data, error } = await supabase
+      .rpc('get_customer_custom_fields', {
+        p_customer_id: customerId
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // קבלת סטטיסטיקות
+  async getCustomFieldsStats(orgId?: string): Promise<CustomFieldStats> {
+    const { data, error } = await supabase
+      .rpc('get_custom_fields_stats', {
+        p_org_id: orgId || '11111111-1111-1111-1111-111111111111'
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // ייצוא הגדרות שדות
+  async exportFieldDefinitions(orgId?: string) {
+    const { data, error } = await supabase
+      .rpc('export_field_definitions', {
+        p_org_id: orgId || '11111111-1111-1111-1111-111111111111'
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // ייבוא הגדרות שדות
+  async importFieldDefinitions(
+    definitions: any[],
+    orgId?: string,
+    userId?: string
+  ) {
+    const { data, error } = await supabase
+      .rpc('import_field_definitions', {
+        p_definitions: definitions,
+        p_org_id: orgId || '11111111-1111-1111-1111-111111111111',
+        p_user_id: userId
+      });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // עזר לולידציה של שדה
+  validateField(
+    field: FieldDefinition,
+    value: any
+  ): { valid: boolean; error?: string } {
+    if (field.is_required && !value) {
+      return { valid: false, error: `${field.display_name} הוא שדה חובה` };
+    }
+
+    const rules = field.validation_rules;
+    if (!rules) return { valid: true };
+
+    if (field.field_type === 'text' || field.field_type === 'textarea') {
+      if (rules.minLength && value && value.length < rules.minLength) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} חייב להכיל לפחות ${rules.minLength} תווים` 
+        };
+      }
+      if (rules.maxLength && value && value.length > rules.maxLength) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} יכול להכיל עד ${rules.maxLength} תווים` 
+        };
+      }
+    }
+
+    if (field.field_type === 'number' || field.field_type === 'currency') {
+      const numValue = parseFloat(value);
+      if (rules.min !== undefined && numValue < rules.min) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} חייב להיות לפחות ${rules.min}` 
+        };
+      }
+      if (rules.max !== undefined && numValue > rules.max) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} יכול להיות עד ${rules.max}` 
+        };
+      }
+    }
+
+    if (field.field_type === 'email' && value) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} חייב להיות כתובת אימייל תקינה` 
+        };
+      }
+    }
+
+    if (field.field_type === 'phone' && value) {
+      const phoneRegex = /^[\d\-\+\(\)\s]+$/;
+      if (!phoneRegex.test(value)) {
+        return { 
+          valid: false, 
+          error: `${field.display_name} חייב להיות מספר טלפון תקין` 
+        };
+      }
+    }
+
+    if (field.field_type === 'url' && value) {
+      try {
+        new URL(value);
+      } catch {
+        return { 
+          valid: false, 
+          error: `${field.display_name} חייב להיות כתובת URL תקינה` 
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+};
+
+// =====================================================
+// Default Organization ID
+// =====================================================
+export const DEFAULT_ORG_ID = '11111111-1111-1111-1111-111111111111';

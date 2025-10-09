@@ -293,3 +293,67 @@ export interface CustomerPaymentRouteFormData {
   processor_id: string;
   card_brand_id: string;
   supplier_number: string;
+  notes?: string;
+}
+
+export interface CustomerLinkFormData {
+  title: string;
+  url: string;
+}
+
+export interface CustomerHardwareAssetFormData {
+  name: string;
+  model?: string;
+  serial?: string;
+  purchase_date?: string;
+  notes?: string;
+}
+
+export interface CustomerBillingLineFormData {
+  item_name: string;
+  amount_monthly: number;
+  amount_one_time: number;
+  discount_percent: number;
+  notes?: string;
+}
+
+// =====================================================
+// Filter Types
+// =====================================================
+
+export interface CustomerFilters {
+  search?: string;
+  status_id?: string;
+  brand_id?: string;
+  region?: string;
+  product_ids?: string[];
+  pos_vendor_id?: string;
+}
+
+// =====================================================
+// Response Types
+// =====================================================
+
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
+  success: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+// =====================================================
+// Helper Types
+// =====================================================
+
+export interface SelectOption {
+  value: string;
+  label: string;
+  color?: string;
+}

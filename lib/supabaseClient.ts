@@ -95,6 +95,7 @@ export const customFieldsHelpers = {
           return false
         }
       case 'number':
+      case 'currency':
         return !isNaN(value)
       default:
         return true
@@ -125,6 +126,7 @@ export const customFieldsHelpers = {
         }
       
       case 'number':
+      case 'currency':
         const isValidNumber = !isNaN(value)
         return isValidNumber ? { valid: true } : { valid: false, error: 'ערך מספרי לא תקין' }
       

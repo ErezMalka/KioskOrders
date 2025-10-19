@@ -7,15 +7,15 @@ import {
   TicketPriority,
   CreateTicketInput,
   UpdateTicketInput 
-} from '../lib/types-tickets'
+} from '../../lib/types-tickets'
 
-// יצירת Supabase client ישירות כאן
+// יצירת Supabase client מקומי
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// פונקציות עזר - מוגדרות כאן במקום לייבא
+// פונקציות עזר מקומיות
 function getCurrentOrgId(): string {
   return 'org_1' // ערך דמה לבדיקות
 }

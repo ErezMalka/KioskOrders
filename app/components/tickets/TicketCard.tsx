@@ -1,6 +1,6 @@
 'use client'
 
-import { Ticket } from '../../../lib/types-tickets'
+import { Ticket } from '../../lib/types-tickets'
 import { 
   Clock, 
   User, 

@@ -99,6 +99,38 @@ export const customFieldsHelpers = {
       default:
         return true
     }
+  },
+  
+  // הפונקציה שהקוד מחפש - מחזירה אובייקט עם valid ו-error
+  validateField: (field: FieldDefinition, value: any): { valid: boolean, error?: string } => {
+    if (field.is_required && !value) {
+      return { valid: false, error: 'שדה חובה' }
+    }
+    
+    switch (field.field_type) {
+      case 'email':
+        const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+        return isValidEmail ? { valid: true } : { valid: false, error: 'כתובת אימייל לא תקינה' }
+      
+      case 'phone':
+        const isValidPhone = /^[\d\s\-\+\(\)]+$/.test(value)
+        return isValidPhone ? { valid: true } : { valid: false, error: 'מספר טלפון לא תקין' }
+      
+      case 'url':
+        try {
+          new URL(value)
+          return { valid: true }
+        } catch {
+          return { valid: false, error: 'כתובת URL לא תקינה' }
+        }
+      
+      case 'number':
+        const isValidNumber = !isNaN(value)
+        return isValidNumber ? { valid: true } : { valid: false, error: 'ערך מספרי לא תקין' }
+      
+      default:
+        return { valid: true }
+    }
   }
 }
 

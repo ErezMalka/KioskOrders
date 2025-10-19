@@ -1,42 +1,56 @@
-// הוסף את הפונקציות האלה לקובץ supabaseClient.ts הקיים שלך:
+import { createBrowserClient } from '@supabase/ssr'
 
-// =========== הוסף את הפונקציות האלה לסוף הקובץ ===========
+// יצירת ה-client
+const supabaseClient = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-// פונקציות עזר לקבלת נתוני משתמש וארגון
-// כרגע מחזירים mock data - להחליף ב-authentication אמיתי בהמשך
+// Export בשמות שונים כדי לתמוך בכל השימושים
+export const supabase = supabaseClient
+export { supabaseClient }
+export default supabaseClient
 
+// קבועים נוספים שהמערכת מחפשת
+export const DEFAULT_ORG_ID = 'org_1'
+
+// Helper functions שהמערכת משתמשת בהן
+export const customFieldsHelpers = {
+  // פונקציות עזר לשדות מותאמים אישית
+  getCustomFields: async (orgId: string) => {
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('org_id', orgId)
+    
+    if (error) throw error
+    return data
+  },
+  
+  saveCustomFieldValues: async (entityId: string, values: any) => {
+    const { data, error } = await supabase
+      .from('custom_field_values')
+      .upsert({
+        entity_id: entityId,
+        values: values,
+        updated_at: new Date().toISOString()
+      })
+    
+    if (error) throw error
+    return data
+  }
+}
+
+// פונקציות נוספות למערכת הטיקטים
 export function getCurrentOrgId(): string {
-  // TODO: להחליף בלוגיקה אמיתית לקבלת org_id מהמשתמש המחובר
-  return 'org_1' // ערך דמה לבדיקות
+  return DEFAULT_ORG_ID
 }
 
 export function getCurrentUser() {
-  // TODO: להחליף בלוגיקה אמיתית לקבלת פרטי המשתמש המחובר
   return {
     id: 'user_1',
     email: 'admin@example.com',
     display_name: 'מנהל מערכת',
     role: 'admin'
-  }
-}
-
-// פונקציה לבדיקת חיבור
-export async function testConnection() {
-  try {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select('count', { count: 'exact' })
-      .limit(1)
-    
-    if (error) {
-      console.error('Supabase connection error:', error)
-      return false
-    }
-    
-    console.log('Supabase connected successfully')
-    return true
-  } catch (error) {
-    console.error('Failed to connect to Supabase:', error)
-    return false
   }
 }

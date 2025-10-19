@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase, getCurrentOrgId, getCurrentUser } from '../lib/supabaseClient'
+import { createBrowserClient } from '@supabase/ssr'
 import { 
   Ticket, 
   TicketMessage, 
@@ -8,6 +8,26 @@ import {
   CreateTicketInput,
   UpdateTicketInput 
 } from '../lib/types-tickets'
+
+// יצירת Supabase client ישירות כאן
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+// פונקציות עזר - מוגדרות כאן במקום לייבא
+function getCurrentOrgId(): string {
+  return 'org_1' // ערך דמה לבדיקות
+}
+
+function getCurrentUser() {
+  return {
+    id: 'user_1',
+    email: 'admin@example.com',
+    display_name: 'מנהל מערכת',
+    role: 'admin'
+  }
+}
 
 // =================== QUERIES ===================
 

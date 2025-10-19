@@ -5,7 +5,7 @@ import { useTickets } from '../hooks/useTickets'
 import TicketFilters from '../components/tickets/TicketFilters'
 import TicketCard from '../components/tickets/TicketCard'
 import TicketDetails from '../components/tickets/TicketDetails'
-import { Ticket } from '../lib/types-tickets'
+import { Ticket } from '../../lib/types-tickets'
 import { Plus, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 

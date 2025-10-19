@@ -73,7 +73,7 @@ export default function TicketDetails({ ticket: initialTicket, isOpen, onClose }
         ticketId: currentTicket.id,
         status: newStatus as any
       })
-      setSelectedStatus(newStatus)
+      setSelectedStatus(newStatus as any)
       setShowStatusDropdown(false)
     } catch (error) {
       console.error('Error updating status:', error)

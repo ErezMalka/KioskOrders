@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase, getCurrentOrgId, getCurrentUser } from '../lib/supabase'
+import { supabase, getCurrentOrgId, getCurrentUser } from '../lib/supabaseClient'
 import { 
   Ticket, 
   TicketMessage, 

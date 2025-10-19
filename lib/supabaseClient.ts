@@ -10,12 +10,14 @@ export interface FieldDefinition {
   field_name: string
   field_type: FieldType
   field_label: string
-  display_name?: string  // הוספתי את זה
+  display_name?: string
   is_required: boolean
   is_active: boolean
   is_searchable?: boolean
   is_visible?: boolean
   field_options?: string[] | null
+  options?: any  // הוספתי את זה
+  sort_order?: number  // גם זה נראה חסר
   default_value?: any
   field_category: FieldCategory
   display_order?: number

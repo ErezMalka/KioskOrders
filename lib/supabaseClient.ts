@@ -10,6 +10,7 @@ export interface FieldDefinition {
   field_name: string
   field_type: FieldType
   field_label: string
+  display_name?: string  // הוספתי את זה
   is_required: boolean
   is_active: boolean
   is_searchable?: boolean

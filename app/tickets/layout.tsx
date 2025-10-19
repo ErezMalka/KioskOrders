@@ -1,5 +1,5 @@
-import { QueryProvider } from '@/providers/QueryProvider'
-import TicketsNavigation from '@/components/tickets/TicketsNavigation'
+import { QueryProvider } from '../providers/QueryProvider'
+import TicketsNavigation from '../components/tickets/TicketsNavigation'
 
 export default function TicketsLayout({
   children,

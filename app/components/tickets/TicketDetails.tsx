@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { useTicket, useAddMessage, useUpdateTicketStatus } from '../../../hooks/useTickets'
+import { useTicket, useAddMessage, useUpdateTicketStatus } from '../../hooks/useTickets'
 
 interface TicketDetailsProps {
   ticket: Ticket

@@ -12,6 +12,8 @@ export interface FieldDefinition {
   field_label: string
   is_required: boolean
   is_active: boolean
+  is_searchable?: boolean
+  is_visible?: boolean
   field_options?: string[] | null
   default_value?: any
   field_category: FieldCategory

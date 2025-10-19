@@ -2,14 +2,39 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase, FieldDefinition, customFieldsHelpers } from '../../lib/supabaseClient'
+import { supabase, customFieldsHelpers } from '../../lib/supabaseClient'
 import { Calendar, DollarSign, Link2, Mail, Phone, Hash } from 'lucide-react'
+
+// הגדרת types מקומיים שכוללים את currency
+type ExtendedFieldType = 'text' | 'number' | 'select' | 'multiselect' | 'date' | 'boolean' | 'email' | 'phone' | 'url' | 'textarea' | 'currency'
+
+interface FieldDefinition {
+  id?: string
+  org_id?: string
+  field_name: string
+  field_type: ExtendedFieldType  // משתמש ב-type המורחב
+  field_label: string
+  display_name?: string
+  is_required: boolean
+  is_active: boolean
+  is_searchable?: boolean
+  is_visible?: boolean
+  field_options?: string[] | null
+  options?: any
+  sort_order?: number
+  default_value?: any
+  field_category: string
+  display_order?: number
+  validation_rules?: any
+  created_at?: string
+  updated_at?: string
+}
 
 interface DynamicFieldsFormProps {
   customerId?: string
   customFields: Record<string, any>
   onChange: (fields: Record<string, any>) => void
-  category?: string // לסינון לפי קטגוריה
+  category?: string
   readonly?: boolean
 }
 
@@ -65,7 +90,7 @@ export default function DynamicFieldsForm({
   }
 
   const validateField = (field: FieldDefinition, value: any): string | null => {
-    const result = customFieldsHelpers.validateField(field, value)
+    const result = customFieldsHelpers.validateField(field as any, value)
     return result.valid ? null : result.error || null
   }
 
@@ -125,7 +150,7 @@ export default function DynamicFieldsForm({
           </div>
         )
 
-      case 'currency':
+      case 'currency':  // עכשיו זה יעבוד!
         return (
           <div className="relative">
             <DollarSign className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
@@ -178,7 +203,7 @@ export default function DynamicFieldsForm({
             disabled={readonly}
           >
             <option value="">בחר {field.display_name}</option>
-            {field.options?.options?.map(option => (
+            {field.options?.options?.map((option: string) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
@@ -187,7 +212,7 @@ export default function DynamicFieldsForm({
       case 'multiselect':
         return (
           <div className="space-y-2">
-            {field.options?.options?.map(option => (
+            {field.options?.options?.map((option: string) => (
               <label key={option} className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -342,7 +367,7 @@ export function DynamicFieldsDisplay({
       .order('sort_order', { ascending: true })
 
     if (data) {
-      setFieldDefinitions(data)
+      setFieldDefinitions(data as FieldDefinition[])
     }
   }
 

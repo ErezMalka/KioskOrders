@@ -1,396 +1,410 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
-import { Plus, Search, Filter, Clock, AlertCircle, CheckCircle, XCircle, User, Calendar, Loader2 } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { Database } from '@/lib/database.types';
+import TicketFilters from '@/app/components/TicketFilters';
 
-interface Ticket {
-  id: string
-  ticket_number: string
-  title: string
-  description?: string
-  status: string
-  priority: string
-  category?: string
-  customer_id?: string
-  created_at: string
-  updated_at: string
-  customer?: {
-    name: string
-    email: string
-  }
-}
+type Ticket = Database['public']['Tables']['tickets']['Row'];
+type Customer = Database['public']['Tables']['customers']['Row'];
+
+const containerStyle: React.CSSProperties = {
+  maxWidth: '1400px',
+  margin: '0 auto',
+  padding: '20px'
+};
+
+const headerStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '30px'
+};
+
+const titleStyle: React.CSSProperties = {
+  fontSize: '32px',
+  fontWeight: 'bold',
+  color: '#333'
+};
+
+const newTicketButtonStyle: React.CSSProperties = {
+  backgroundColor: '#4CAF50',
+  color: 'white',
+  padding: '12px 24px',
+  borderRadius: '6px',
+  border: 'none',
+  fontSize: '16px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  transition: 'all 0.3s',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px'
+};
+
+const tableContainerStyle: React.CSSProperties = {
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  overflow: 'hidden',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+};
+
+const tableStyle: React.CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse' as const
+};
+
+const thStyle: React.CSSProperties = {
+  backgroundColor: '#f5f5f5',
+  padding: '12px',
+  textAlign: 'right' as const,
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#333',
+  borderBottom: '2px solid #e0e0e0'
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '12px',
+  borderBottom: '1px solid #f0f0f0',
+  fontSize: '14px'
+};
+
+const priorityBadgeStyle = (priority: string): React.CSSProperties => ({
+  display: 'inline-block',
+  padding: '4px 8px',
+  borderRadius: '12px',
+  fontSize: '11px',
+  fontWeight: '500',
+  backgroundColor: 
+    priority === 'urgent' ? '#ffebee' :
+    priority === 'high' ? '#fff3e0' :
+    priority === 'medium' ? '#e3f2fd' : '#e8f5e9',
+  color: 
+    priority === 'urgent' ? '#c62828' :
+    priority === 'high' ? '#e65100' :
+    priority === 'medium' ? '#1565c0' : '#2e7d32'
+});
+
+const statusBadgeStyle = (status: string): React.CSSProperties => ({
+  display: 'inline-block',
+  padding: '4px 8px',
+  borderRadius: '12px',
+  fontSize: '11px',
+  fontWeight: '500',
+  backgroundColor: 
+    status === 'open' ? '#e3f2fd' :
+    status === 'in_progress' ? '#fff3e0' :
+    status === 'resolved' ? '#e8f5e9' :
+    status === 'closed' ? '#f5f5f5' : '#ffebee',
+  color: 
+    status === 'open' ? '#1565c0' :
+    status === 'in_progress' ? '#e65100' :
+    status === 'resolved' ? '#2e7d32' :
+    status === 'closed' ? '#616161' : '#c62828'
+});
+
+const rowStyle: React.CSSProperties = {
+  cursor: 'pointer',
+  transition: 'background-color 0.2s'
+};
+
+const loadingStyle: React.CSSProperties = {
+  textAlign: 'center' as const,
+  padding: '50px',
+  fontSize: '16px',
+  color: '#666'
+};
+
+const emptyStateStyle: React.CSSProperties = {
+  textAlign: 'center' as const,
+  padding: '60px',
+  backgroundColor: '#f9f9f9',
+  borderRadius: '8px',
+  margin: '20px 0'
+};
+
+const emptyStateIconStyle: React.CSSProperties = {
+  fontSize: '48px',
+  marginBottom: '20px'
+};
+
+const emptyStateTextStyle: React.CSSProperties = {
+  fontSize: '18px',
+  color: '#666',
+  marginBottom: '20px'
+};
 
 export default function TicketsPage() {
-  const [tickets, setTickets] = useState<Ticket[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-  const [filterPriority, setFilterPriority] = useState('all')
+  const router = useRouter();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    status: '',
+    priority: '',
+    category: '',
+    search: ''
+  });
 
   useEffect(() => {
-    fetchTickets()
-  }, [])
+    fetchTickets();
+    fetchCustomers();
+  }, []);
 
-  const fetchTickets = async () => {
+  async function fetchTickets() {
+    setLoading(true);
     try {
-      setLoading(true)
       const { data, error } = await supabase
         .from('tickets')
-        .select(`
-          *,
-          customer:customers(name, email)
-        `)
-        .order('created_at', { ascending: false })
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (error) throw error
-      setTickets(data || [])
+      if (error) throw error;
+      setTickets(data || []);
     } catch (error) {
-      console.error('Error fetching tickets:', error)
+      console.error('Error fetching tickets:', error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  const filteredTickets = tickets.filter(ticket => {
-    const matchesSearch = searchTerm === '' || 
-      ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  async function fetchCustomers() {
+    const { data } = await supabase
+      .from('customers')
+      .select('*');
     
-    const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus
-    const matchesPriority = filterPriority === 'all' || ticket.priority === filterPriority
-    
-    return matchesSearch && matchesStatus && matchesPriority
-  })
-
-  const getStatusStyle = (status: string) => {
-    const styles: Record<string, React.CSSProperties> = {
-      new: { backgroundColor: '#EBF5FF', color: '#1E40AF', border: '1px solid #BFDBFE' },
-      in_progress: { backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' },
-      resolved: { backgroundColor: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' },
-      closed: { backgroundColor: '#F3F4F6', color: '#374151', border: '1px solid #D1D5DB' }
-    }
-    return styles[status] || styles.closed
-  }
-
-  const getPriorityStyle = (priority: string) => {
-    const styles: Record<string, React.CSSProperties> = {
-      urgent: { backgroundColor: '#FEE2E2', color: '#991B1B' },
-      high: { backgroundColor: '#FED7AA', color: '#9A3412' },
-      medium: { backgroundColor: '#FEF3C7', color: '#92400E' },
-      low: { backgroundColor: '#D1FAE5', color: '#065F46' }
-    }
-    return styles[priority] || styles.low
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'new': return <Clock size={16} />
-      case 'in_progress': return <AlertCircle size={16} />
-      case 'resolved': return <CheckCircle size={16} />
-      case 'closed': return <XCircle size={16} />
-      default: return null
+    if (data) {
+      setCustomers(data);
     }
   }
 
-  const getStatusText = (status: string) => {
-    const texts: Record<string, string> = {
-      new: 'חדש',
-      in_progress: 'בטיפול',
-      resolved: 'נפתר',
-      closed: 'סגור'
-    }
-    return texts[status] || status
-  }
+  // Filter tickets based on current filters
+  const filteredTickets = useMemo(() => {
+    return tickets.filter(ticket => {
+      // Status filter
+      if (filters.status && ticket.status !== filters.status) {
+        return false;
+      }
+      
+      // Priority filter
+      if (filters.priority && ticket.priority !== filters.priority) {
+        return false;
+      }
+      
+      // Category filter
+      if (filters.category && ticket.category !== filters.category) {
+        return false;
+      }
+      
+      // Search filter
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase();
+        const matchesTitle = ticket.title?.toLowerCase().includes(searchTerm);
+        const matchesDescription = ticket.description?.toLowerCase().includes(searchTerm);
+        const matchesId = ticket.id?.toString().includes(searchTerm);
+        
+        if (!matchesTitle && !matchesDescription && !matchesId) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [tickets, filters]);
+
+  const getCustomerName = (customerId: string | null) => {
+    if (!customerId) return 'לא מוגדר';
+    const customer = customers.find(c => c.id === customerId);
+    return customer?.name || 'לא ידוע';
+  };
 
   const getPriorityText = (priority: string) => {
-    const texts: Record<string, string> = {
-      urgent: 'דחוף',
-      high: 'גבוה',
-      medium: 'בינוני',
-      low: 'נמוך'
+    switch (priority) {
+      case 'urgent': return 'דחוף';
+      case 'high': return 'גבוה';
+      case 'medium': return 'בינוני';
+      case 'low': return 'נמוך';
+      default: return priority;
     }
-    return texts[priority] || priority
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'open': return 'פתוח';
+      case 'in_progress': return 'בטיפול';
+      case 'pending': return 'בהמתנה';
+      case 'resolved': return 'נפתר';
+      case 'closed': return 'סגור';
+      default: return status;
+    }
+  };
+
+  const getCategoryText = (category: string | null) => {
+    if (!category) return 'לא מוגדר';
+    switch (category) {
+      case 'support': return 'תמיכה';
+      case 'bug': return 'באג';
+      case 'feature': return 'בקשת פיצ'ר';
+      case 'other': return 'אחר';
+      default: return category;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffHours < 1) {
+      return 'לפני פחות משעה';
+    } else if (diffHours < 24) {
+      return `לפני ${diffHours} שעות`;
+    } else if (diffDays === 1) {
+      return 'אתמול';
+    } else if (diffDays < 7) {
+      return `לפני ${diffDays} ימים`;
+    } else {
+      return date.toLocaleDateString('he-IL');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={containerStyle}>
+        <div style={loadingStyle}>
+          <div>טוען טיקטים...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#F9FAFB', minHeight: '100vh', direction: 'rtl' }}>
+    <div style={containerStyle}>
       {/* Header */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '24px', 
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        marginBottom: '24px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
-              מרכז תמיכה
-            </h1>
-            <p style={{ color: '#6B7280', fontSize: '14px' }}>
-              ניהול פניות ובקשות לקוחות
-            </p>
-            
-            <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#3B82F6' }}></div>
-                <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                  {tickets.filter(t => t.status === 'new').length} חדשים
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#EAB308' }}></div>
-                <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                  {tickets.filter(t => t.status === 'in_progress').length} בטיפול
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#10B981' }}></div>
-                <span style={{ fontSize: '14px', color: '#6B7280' }}>
-                  {tickets.filter(t => t.status === 'resolved').length} נפתרו
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          <Link href="/tickets/new" style={{ textDecoration: 'none' }}>
-            <button style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 20px',
-              backgroundColor: '#3B82F6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}>
-              <Plus size={20} />
-              טיקט חדש
-            </button>
-          </Link>
-        </div>
+      <div style={headerStyle}>
+        <h1 style={titleStyle}>ניהול טיקטים</h1>
+        <button
+          onClick={() => router.push('/tickets/new')}
+          style={newTicketButtonStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#45a049';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#4CAF50';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>+</span>
+          טיקט חדש
+        </button>
       </div>
 
       {/* Filters */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '16px', 
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        marginBottom: '24px'
-      }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <Search size={20} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-            <input
-              type="text"
-              placeholder="חיפוש לפי מספר טיקט, כותרת או לקוח..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 40px 8px 12px',
-                border: '1px solid #D1D5DB',
-                borderRadius: '8px',
-                fontSize: '14px'
-              }}
-            />
-          </div>
-          
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #D1D5DB',
-              borderRadius: '8px',
-              fontSize: '14px',
-              backgroundColor: 'white'
-            }}
-          >
-            <option value="all">כל הסטטוסים</option>
-            <option value="new">חדש</option>
-            <option value="in_progress">בטיפול</option>
-            <option value="resolved">נפתר</option>
-            <option value="closed">סגור</option>
-          </select>
-          
-          <select
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #D1D5DB',
-              borderRadius: '8px',
-              fontSize: '14px',
-              backgroundColor: 'white'
-            }}
-          >
-            <option value="all">כל העדיפויות</option>
-            <option value="urgent">דחוף</option>
-            <option value="high">גבוה</option>
-            <option value="medium">בינוני</option>
-            <option value="low">נמוך</option>
-          </select>
-          
-          <button
-            onClick={fetchTickets}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#F3F4F6',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center'
-            }}
-          >
-            <Filter size={20} />
-          </button>
-        </div>
-      </div>
+      <TicketFilters 
+        filters={filters} 
+        onFilterChange={setFilters}
+      />
 
-      {/* Table */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        overflow: 'hidden'
-      }}>
-        {loading ? (
-          <div style={{ padding: '48px', textAlign: 'center' }}>
-            <Loader2 size={32} style={{ margin: '0 auto' }} />
-            <p style={{ marginTop: '16px', color: '#6B7280' }}>טוען טיקטים...</p>
+      {/* Tickets Table */}
+      {filteredTickets.length === 0 ? (
+        <div style={emptyStateStyle}>
+          <div style={emptyStateIconStyle}>📋</div>
+          <div style={emptyStateTextStyle}>
+            {filters.search || filters.status || filters.priority || filters.category
+              ? 'לא נמצאו טיקטים התואמים לחיפוש'
+              : 'עדיין אין טיקטים במערכת'}
           </div>
-        ) : filteredTickets.length === 0 ? (
-          <div style={{ padding: '48px', textAlign: 'center' }}>
-            <p style={{ fontSize: '18px', color: '#374151', marginBottom: '8px' }}>אין טיקטים להצגה</p>
-            <p style={{ color: '#6B7280', fontSize: '14px' }}>צור טיקט חדש או שנה את הפילטרים</p>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+          {!filters.search && !filters.status && !filters.priority && !filters.category && (
+            <button
+              onClick={() => router.push('/tickets/new')}
+              style={{
+                ...newTicketButtonStyle,
+                margin: '0 auto'
+              }}
+            >
+              צור את הטיקט הראשון
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={tableContainerStyle}>
+          <table style={tableStyle}>
+            <thead>
               <tr>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  מספר
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  כותרת
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  לקוח
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  סטטוס
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  עדיפות
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#6B7280' }}>
-                  נוצר
-                </th>
+                <th style={thStyle}>מס׳</th>
+                <th style={thStyle}>כותרת</th>
+                <th style={thStyle}>לקוח</th>
+                <th style={thStyle}>קטגוריה</th>
+                <th style={thStyle}>סטטוס</th>
+                <th style={thStyle}>עדיפות</th>
+                <th style={thStyle}>נוצר</th>
               </tr>
             </thead>
             <tbody>
-              {filteredTickets.map(ticket => (
-                <tr 
+              {filteredTickets.map((ticket) => (
+                <tr
                   key={ticket.id}
-                  style={{ 
-                    borderBottom: '1px solid #E5E7EB',
-                    cursor: 'pointer'
+                  style={rowStyle}
+                  onClick={() => router.push(`/tickets/${ticket.id}`)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f8f9fa';
                   }}
-                  onClick={() => window.location.href = `/tickets/${ticket.id}`}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
                 >
-                  <td style={{ padding: '16px', fontSize: '14px', fontWeight: '500', color: '#111827' }}>
-                    #{ticket.ticket_number}
+                  <td style={tdStyle}>
+                    <span style={{ color: '#666', fontSize: '12px' }}>
+                      #{ticket.id.slice(0, 8)}
+                    </span>
                   </td>
-                  <td style={{ padding: '16px' }}>
-                    <div>
-                      <p style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
-                        {ticket.title}
-                      </p>
-                      {ticket.description && (
-                        <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                          {ticket.description.substring(0, 50)}...
-                        </p>
-                      )}
-                    </div>
+                  <td style={{ ...tdStyle, fontWeight: '500' }}>
+                    {ticket.title}
                   </td>
-                  <td style={{ padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #667EEA, #764BA2)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}>
-                        <User size={16} color="white" />
-                      </div>
-                      <div>
-                        <p style={{ fontSize: '14px', fontWeight: '500', color: '#111827' }}>
-                          {ticket.customer?.name || 'לקוח לא ידוע'}
-                        </p>
-                        <p style={{ fontSize: '12px', color: '#6B7280' }}>
-                          {ticket.customer?.email}
-                        </p>
-                      </div>
-                    </div>
+                  <td style={tdStyle}>
+                    {getCustomerName(ticket.customer_id)}
                   </td>
-                  <td style={{ padding: '16px', textAlign: 'center' }}>
-                    <span style={{
-                      ...getStatusStyle(ticket.status),
-                      padding: '4px 12px',
-                      borderRadius: '16px',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      {getStatusIcon(ticket.status)}
+                  <td style={tdStyle}>
+                    {getCategoryText(ticket.category)}
+                  </td>
+                  <td style={tdStyle}>
+                    <span style={statusBadgeStyle(ticket.status)}>
                       {getStatusText(ticket.status)}
                     </span>
                   </td>
-                  <td style={{ padding: '16px', textAlign: 'center' }}>
-                    <span style={{
-                      ...getPriorityStyle(ticket.priority),
-                      padding: '4px 12px',
-                      borderRadius: '16px',
-                      fontSize: '12px',
-                      fontWeight: '500'
-                    }}>
+                  <td style={tdStyle}>
+                    <span style={priorityBadgeStyle(ticket.priority)}>
                       {getPriorityText(ticket.priority)}
                     </span>
                   </td>
-                  <td style={{ padding: '16px' }}>
-                    <div style={{ fontSize: '14px', color: '#374151' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={14} />
-                        {new Date(ticket.created_at).toLocaleDateString('he-IL')}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>
-                        {new Date(ticket.created_at).toLocaleTimeString('he-IL', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </div>
-                    </div>
+                  <td style={{ ...tdStyle, color: '#666', fontSize: '13px' }}>
+                    {formatDate(ticket.created_at)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Summary Stats */}
+      {tickets.length > 0 && (
+        <div style={{ 
+          marginTop: '20px', 
+          textAlign: 'center' as const, 
+          color: '#666',
+          fontSize: '14px'
+        }}>
+          מציג {filteredTickets.length} מתוך {tickets.length} טיקטים
+        </div>
+      )}
     </div>
-  )
+  );
 }

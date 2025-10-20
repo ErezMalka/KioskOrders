@@ -1,78 +1,155 @@
-'use client'
-
-import { Search, Filter, X } from 'lucide-react'
+import React from 'react';
 
 interface TicketFiltersProps {
   filters: {
-    status: string
-    priority: string
-    category: string
-    search: string
-  }
-  onFiltersChange: (filters: any) => void
+    status: string;
+    priority: string;
+    category: string;
+    search: string;
+  };
+  onFilterChange: (filters: any) => void;
 }
 
-export default function TicketFilters({ filters, onFiltersChange }: TicketFiltersProps) {
+const containerStyle: React.CSSProperties = {
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  padding: '20px',
+  marginBottom: '20px',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+};
+
+const filtersRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '15px',
+  flexWrap: 'wrap' as const,
+  alignItems: 'center'
+};
+
+const filterGroupStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column' as const,
+  minWidth: '150px'
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#666',
+  marginBottom: '4px',
+  fontWeight: '500'
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  border: '1px solid #ddd',
+  borderRadius: '4px',
+  fontSize: '14px',
+  backgroundColor: '#fff',
+  cursor: 'pointer',
+  transition: 'border-color 0.3s',
+  outline: 'none'
+};
+
+const searchInputStyle: React.CSSProperties = {
+  ...selectStyle,
+  minWidth: '250px'
+};
+
+const resetButtonStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  backgroundColor: '#f5f5f5',
+  border: '1px solid #ddd',
+  borderRadius: '4px',
+  fontSize: '14px',
+  cursor: 'pointer',
+  transition: 'all 0.3s',
+  marginTop: '20px'
+};
+
+const statsStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '20px',
+  marginTop: '15px',
+  paddingTop: '15px',
+  borderTop: '1px solid #f0f0f0'
+};
+
+const statItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px'
+};
+
+const statLabelStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#999'
+};
+
+const statValueStyle: React.CSSProperties = {
+  fontSize: '18px',
+  fontWeight: 'bold',
+  color: '#333'
+};
+
+export default function TicketFilters({ filters, onFilterChange }: TicketFiltersProps) {
   const handleFilterChange = (key: string, value: string) => {
-    onFiltersChange({
+    onFilterChange({
       ...filters,
       [key]: value
-    })
-  }
+    });
+  };
 
-  const activeFiltersCount = Object.entries(filters).filter(
-    ([key, value]) => value !== 'all' && value !== ''
-  ).length
+  const handleReset = () => {
+    onFilterChange({
+      status: '',
+      priority: '',
+      category: '',
+      search: ''
+    });
+  };
+
+  const hasActiveFilters = Object.values(filters).some(value => value !== '');
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-      <div className="flex flex-wrap gap-4">
-        {/* חיפוש */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="חיפוש לפי מספר, כותרת או תוכן..."
-              className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={filters.search}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-            />
-            {filters.search && (
-              <button
-                onClick={() => handleFilterChange('search', '')}
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-              >
-                <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
-              </button>
-            )}
-          </div>
+    <div style={containerStyle}>
+      <div style={filtersRowStyle}>
+        {/* Search */}
+        <div style={{ ...filterGroupStyle, flex: 1 }}>
+          <label style={labelStyle}>חיפוש</label>
+          <input
+            type="text"
+            placeholder="חפש לפי כותרת או תיאור..."
+            value={filters.search}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+            style={searchInputStyle}
+          />
         </div>
 
-        {/* סטטוס */}
-        <div className="min-w-[150px]">
+        {/* Status Filter */}
+        <div style={filterGroupStyle}>
+          <label style={labelStyle}>סטטוס</label>
           <select
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.status}
             onChange={(e) => handleFilterChange('status', e.target.value)}
+            style={selectStyle}
           >
-            <option value="all">כל הסטטוסים</option>
+            <option value="">כל הסטטוסים</option>
             <option value="open">פתוח</option>
             <option value="in_progress">בטיפול</option>
-            <option value="waiting_for_customer">ממתין ללקוח</option>
+            <option value="pending">בהמתנה</option>
             <option value="resolved">נפתר</option>
             <option value="closed">סגור</option>
           </select>
         </div>
 
-        {/* עדיפות */}
-        <div className="min-w-[150px]">
+        {/* Priority Filter */}
+        <div style={filterGroupStyle}>
+          <label style={labelStyle}>עדיפות</label>
           <select
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.priority}
             onChange={(e) => handleFilterChange('priority', e.target.value)}
+            style={selectStyle}
           >
-            <option value="all">כל העדיפויות</option>
+            <option value="">כל העדיפויות</option>
             <option value="low">נמוכה</option>
             <option value="medium">בינונית</option>
             <option value="high">גבוהה</option>
@@ -80,40 +157,54 @@ export default function TicketFilters({ filters, onFiltersChange }: TicketFilter
           </select>
         </div>
 
-        {/* קטגוריה */}
-        <div className="min-w-[150px]">
+        {/* Category Filter */}
+        <div style={filterGroupStyle}>
+          <label style={labelStyle}>קטגוריה</label>
           <select
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.category}
             onChange={(e) => handleFilterChange('category', e.target.value)}
+            style={selectStyle}
           >
-            <option value="all">כל הקטגוריות</option>
-            <option value="technical">תמיכה טכנית</option>
-            <option value="billing">חיוב ותשלומים</option>
-            <option value="general">כללי</option>
-            <option value="feature">בקשת פיצ'ר</option>
+            <option value="">כל הקטגוריות</option>
+            <option value="support">תמיכה</option>
             <option value="bug">באג</option>
+            <option value="feature">בקשת פיצר</option>
+            <option value="other">אחר</option>
           </select>
         </div>
 
-        {/* איפוס פילטרים */}
-        {activeFiltersCount > 0 && (
+        {/* Reset Button */}
+        {hasActiveFilters && (
           <button
-            onClick={() => onFiltersChange({
-              status: 'all',
-              priority: 'all',
-              category: 'all',
-              search: ''
-            })}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+            onClick={handleReset}
+            style={resetButtonStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#e0e0e0';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            }}
           >
-            <div className="flex items-center">
-              <X className="w-4 h-4 ml-1" />
-              נקה פילטרים ({activeFiltersCount})
-            </div>
+            נקה פילטרים
           </button>
         )}
       </div>
+
+      {/* Quick Stats (Optional) */}
+      <div style={statsStyle}>
+        <div style={statItemStyle}>
+          <span style={statLabelStyle}>פתוחים:</span>
+          <span style={statValueStyle}>12</span>
+        </div>
+        <div style={statItemStyle}>
+          <span style={statLabelStyle}>בטיפול:</span>
+          <span style={statValueStyle}>5</span>
+        </div>
+        <div style={statItemStyle}>
+          <span style={statLabelStyle}>דחופים:</span>
+          <span style={{ ...statValueStyle, color: '#ff4444' }}>3</span>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

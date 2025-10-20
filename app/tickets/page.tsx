@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useTickets } from '../hooks/useTickets'
-import { Ticket } from '../../lib/types-tickets'
+import { Ticket, TicketStatus, TicketPriority } from '../../lib/types-tickets'
 import { 
   Plus, Loader2, Search, Filter, ChevronDown, 
   Clock, AlertCircle, CheckCircle, XCircle,
@@ -25,8 +25,8 @@ export default function TicketsPage() {
   
   // שימוש ב-hook לטעינת טיקטים
   const { data: tickets, isLoading, error, refetch } = useTickets({
-    status: filters.status === 'all' ? undefined : filters.status as any,
-    priority: filters.priority === 'all' ? undefined : filters.priority as any,
+    status: filters.status === 'all' ? undefined : filters.status as TicketStatus,
+    priority: filters.priority === 'all' ? undefined : filters.priority as TicketPriority,
   })
 
   // סינון טיקטים לפי חיפוש

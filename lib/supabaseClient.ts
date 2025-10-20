@@ -1,7 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr'
 
 // =================== TypeScript Types ===================
-export type FieldType = 'text' | 'number' | 'select' | 'multiselect' | 'date' | 'boolean' | 'email' | 'phone' | 'url' | 'textarea'
+// הוספנו את 'currency' כאן!
+export type FieldType = 'text' | 'number' | 'select' | 'multiselect' | 'date' | 'boolean' | 'email' | 'phone' | 'url' | 'textarea' | 'currency'
 export type FieldCategory = 'customer' | 'product' | 'order' | 'general'
 
 export interface FieldDefinition {
@@ -16,69 +17,75 @@ export interface FieldDefinition {
   is_searchable?: boolean
   is_visible?: boolean
   field_options?: string[] | null
-  options?: any  // הוספתי את זה
-  sort_order?: number  // גם זה נראה חסר
-  default_value?: any
+  options?: any
+  sort_order?: number
   field_category: FieldCategory
-  display_order?: number
+  default_value?: any
   validation_rules?: any
   created_at?: string
   updated_at?: string
 }
 
 // =================== Supabase Client ===================
-const supabaseClient = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabase = createBrowserClient(
+  supabaseUrl,
+  supabaseAnonKey
 )
-
-// Export בשמות שונים כדי לתמוך בכל השימושים
-export const supabase = supabaseClient
-export { supabaseClient }
-export default supabaseClient
-
-// =================== Constants ===================
-export const DEFAULT_ORG_ID = 'org_1'
 
 // =================== Helper Functions ===================
 export const customFieldsHelpers = {
-  // פונקציות עזר לשדות מותאמים אישית
-  getCustomFields: async (orgId: string) => {
+  // Get active fields for an organization
+  getActiveFields: async (orgId: string): Promise<FieldDefinition[]> => {
     const { data, error } = await supabase
       .from('custom_fields')
       .select('*')
       .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
     
     if (error) throw error
-    return data as FieldDefinition[]
+    return data || []
   },
-  
-  saveCustomFieldValues: async (entityId: string, values: any) => {
+
+  // Create new custom field
+  createField: async (field: Partial<FieldDefinition>): Promise<FieldDefinition> => {
     const { data, error } = await supabase
-      .from('custom_field_values')
-      .upsert({
-        entity_id: entityId,
-        values: values,
-        updated_at: new Date().toISOString()
-      })
+      .from('custom_fields')
+      .insert([field])
+      .select()
+      .single()
     
     if (error) throw error
     return data
   },
-  
-  getFieldsByCategory: async (orgId: string, category: FieldCategory) => {
+
+  // Update custom field
+  updateField: async (fieldId: string, updates: Partial<FieldDefinition>): Promise<FieldDefinition> => {
     const { data, error } = await supabase
       .from('custom_fields')
-      .select('*')
-      .eq('org_id', orgId)
-      .eq('field_category', category)
-      .eq('is_active', true)
-      .order('display_order')
+      .update(updates)
+      .eq('id', fieldId)
+      .select()
+      .single()
     
     if (error) throw error
-    return data as FieldDefinition[]
+    return data
   },
-  
+
+  // Delete custom field (soft delete - set is_active to false)
+  deleteField: async (fieldId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('custom_fields')
+      .update({ is_active: false })
+      .eq('id', fieldId)
+    
+    if (error) throw error
+  },
+
+  // Validate field value based on field type
   validateFieldValue: (field: FieldDefinition, value: any): boolean => {
     if (field.is_required && !value) return false
     
@@ -95,15 +102,15 @@ export const customFieldsHelpers = {
           return false
         }
       case 'number':
-      case 'currency':
+      case 'currency':  // currency מטופל כמו number
         return !isNaN(value)
       default:
         return true
     }
   },
-  
-  // הפונקציה שהקוד מחפש - מחזירה אובייקט עם valid ו-error
-  validateField: (field: FieldDefinition, value: any): { valid: boolean, error?: string } => {
+
+  // New validateField function that returns an object
+  validateField: (field: FieldDefinition, value: any): { valid: boolean; error?: string } => {
     if (field.is_required && !value) {
       return { valid: false, error: 'שדה חובה' }
     }
@@ -126,7 +133,7 @@ export const customFieldsHelpers = {
         }
       
       case 'number':
-      case 'currency':
+      case 'currency':  // currency מטופל כמו number
         const isValidNumber = !isNaN(value)
         return isValidNumber ? { valid: true } : { valid: false, error: 'ערך מספרי לא תקין' }
       
@@ -136,37 +143,5 @@ export const customFieldsHelpers = {
   }
 }
 
-// פונקציות נוספות למערכת
-export function getCurrentOrgId(): string {
-  return DEFAULT_ORG_ID
-}
-
-export function getCurrentUser() {
-  return {
-    id: 'user_1',
-    email: 'admin@example.com',
-    display_name: 'מנהל מערכת',
-    role: 'admin'
-  }
-}
-
-// פונקציה לבדיקת חיבור
-export async function testConnection() {
-  try {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select('count', { count: 'exact' })
-      .limit(1)
-    
-    if (error) {
-      console.error('Supabase connection error:', error)
-      return false
-    }
-    
-    console.log('Supabase connected successfully')
-    return true
-  } catch (error) {
-    console.error('Failed to connect to Supabase:', error)
-    return false
-  }
-}
+// =================== Export Everything ===================
+export default supabase

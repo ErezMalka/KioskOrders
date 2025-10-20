@@ -26,6 +26,9 @@ export interface FieldDefinition {
   updated_at?: string
 }
 
+// =================== Constants ===================
+export const DEFAULT_ORG_ID = 'default-org-id' // ערך ברירת מחדל לארגון
+
 // =================== Supabase Client ===================
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!

@@ -270,44 +270,70 @@ export default function CreateOrderPage() {
     loadCartFromStorage();
   }, []);
 
-  const checkAuth = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-      await loadCustomers();
-      await loadProducts();
-    } catch (error) {
-      console.error('Auth check error:', error);
-      setError('שגיאה בבדיקת הרשאות');
+const checkAuth = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.push('/login');
+      return;
     }
-  };
 
-  const loadCustomers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .order('name');
+    // קריאה מטבלת profiles
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('org_id')
+      .eq('id', session.user.id)
+      .single();
 
-      if (error) {
-        console.error('Error loading customers:', error);
-        if ((error as any).code !== 'PGRST116') {
-          setError(`שגיאה בטעינת לקוחות: ${error.message}`);
-        }
-        return;
-      }
-
-      setCustomers(data || []);
-      if (data && data.length > 0 && data[0].org_id) {
-        setUserOrgId(data[0].org_id);
-      }
-    } catch (error) {
-      console.error('Error:', error);
+    if (error || !profile) {
+      console.error('Profile error:', error);
+      setError('לא נמצא פרופיל משתמש. נא ליצור קשר עם התמיכה.');
+      return;
     }
-  };
+
+    setUserOrgId(profile.org_id);
+    await loadCustomers();
+    await loadProducts();
+  } catch (error) {
+    console.error('Auth check error:', error);
+    setError('שגיאה בבדיקת הרשאות');
+  }
+};
+const loadCustomers = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error loading customers:', error);
+      if ((error as any).code !== 'PGRST116') {
+        setError(`שגיאה בטעינת לקוחות: ${error.message}`);
+      }
+      return;
+    }
+
+    setCustomers(data || []);
+    
+    // נסה לקחת org_id מהלקוח הראשון
+    if (data && data.length > 0 && data[0].org_id) {
+      setUserOrgId(data[0].org_id);
+    } 
+    // אם אין לקוחות, נסה לקחת מה-session
+    else if (session?.user.user_metadata?.org_id) {
+      setUserOrgId(session.user.user_metadata.org_id);
+    }
+    // אם גם זה לא עובד, הצג שגיאה ברורה
+    else {
+      setError('לא ניתן לזהות את הארגון. נא ליצור לקוח ראשון או ליצור קשר עם התמיכה.');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
 
   const loadProducts = async () => {
     try {

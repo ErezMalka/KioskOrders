@@ -248,7 +248,7 @@ export default function NewCustomerForm({
                 <option value="">בחר סטטוס</option>
                 {statuses.map(status => (
                   <option key={status.id} value={status.id}>
-                    {status.name}
+                    {status.description}
                   </option>
                 ))}
               </select>

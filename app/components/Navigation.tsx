@@ -51,13 +51,14 @@ export default function Navigation() {
     return null;
   }
 
-  // Base menu items 
+  // Base menu items - הוספנו את תמיכה/טיקטים
   let menuItems = [
     { path: '/dashboard', label: '🏠 לוח בקרה', icon: '🏠' },
     { path: '/orders/create', label: '➕ הזמנה חדשה', icon: '➕' },
     { path: '/orders', label: '📋 הזמנות', icon: '📋' },
     { path: '/products', label: '📦 מוצרים', icon: '📦' },
     { path: '/customers', label: '👥 לקוחות', icon: '👥' },
+    { path: '/tickets', label: '🎧 תמיכה', icon: '🎧' },  // חדש!
     { path: '/reports', label: '📊 דוחות', icon: '📊' },
     { path: '/settings', label: '⚙️ הגדרות', icon: '⚙️' },
   ];
@@ -65,11 +66,11 @@ export default function Navigation() {
   // Filter menu items based on role
   if (userProfile?.role === 'VIEWER') {
     menuItems = menuItems.filter(item => 
-      ['/dashboard', '/orders', '/reports'].includes(item.path)
+      ['/dashboard', '/orders', '/tickets', '/reports'].includes(item.path)  // הוספנו tickets גם ל-VIEWER
     );
   } else if (userProfile?.role === 'SALES_AGENT') {
     menuItems = menuItems.filter(item => 
-      item.path !== '/settings'
+      item.path !== '/settings'  // SALES_AGENT יכול לראות את כל הדפים חוץ מהגדרות, כולל תמיכה
     );
   }
 
@@ -158,7 +159,8 @@ export default function Navigation() {
                 onClick={() => router.push(item.path)}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: pathname === item.path ? '#34495e' : 'transparent',
+                  backgroundColor: pathname === item.path || 
+                    (item.path === '/tickets' && pathname.startsWith('/tickets')) ? '#34495e' : 'transparent',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
@@ -168,12 +170,12 @@ export default function Navigation() {
                   whiteSpace: 'nowrap'
                 }}
                 onMouseOver={(e) => {
-                  if (pathname !== item.path) {
+                  if (pathname !== item.path && !(item.path === '/tickets' && pathname.startsWith('/tickets'))) {
                     e.currentTarget.style.backgroundColor = '#34495e';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (pathname !== item.path) {
+                  if (pathname !== item.path && !(item.path === '/tickets' && pathname.startsWith('/tickets'))) {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }
                 }}
@@ -346,7 +348,8 @@ export default function Navigation() {
                 }}
                 style={{
                   padding: '10px',
-                  backgroundColor: pathname === item.path ? '#2c3e50' : 'transparent',
+                  backgroundColor: pathname === item.path || 
+                    (item.path === '/tickets' && pathname.startsWith('/tickets')) ? '#2c3e50' : 'transparent',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',

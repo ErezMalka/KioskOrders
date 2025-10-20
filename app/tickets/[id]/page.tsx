@@ -1,34 +1,64 @@
-import React from 'react';
+'use client';
 
-interface TicketFiltersProps {
-  filters: {
-    status: string;
-    priority: string;
-    category: string;
-    search: string;
-  };
-  onFilterChange: (filters: any) => void;
-}
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { Database } from '@/lib/database.types';
+
+type Ticket = Database['public']['Tables']['tickets']['Row'];
+type Customer = Database['public']['Tables']['customers']['Row'];
+type Comment = {
+  id: string;
+  ticket_id: string;
+  content: string;
+  created_at: string;
+  user_name?: string;
+  is_internal?: boolean;
+};
 
 const containerStyle: React.CSSProperties = {
+  maxWidth: '1200px',
+  margin: '0 auto',
+  padding: '20px'
+};
+
+const headerStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '30px',
   backgroundColor: '#fff',
-  borderRadius: '8px',
   padding: '20px',
-  marginBottom: '20px',
+  borderRadius: '8px',
   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
 };
 
-const filtersRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '15px',
-  flexWrap: 'wrap' as const,
-  alignItems: 'center'
+const titleStyle: React.CSSProperties = {
+  fontSize: '28px',
+  fontWeight: 'bold',
+  color: '#333'
 };
 
-const filterGroupStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column' as const,
-  minWidth: '150px'
+const mainContentStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '2fr 1fr',
+  gap: '20px'
+};
+
+const cardStyle: React.CSSProperties = {
+  backgroundColor: '#fff',
+  borderRadius: '8px',
+  padding: '20px',
+  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: '18px',
+  fontWeight: '600',
+  marginBottom: '15px',
+  color: '#333',
+  borderBottom: '2px solid #f0f0f0',
+  paddingBottom: '10px'
 };
 
 const labelStyle: React.CSSProperties = {
@@ -38,171 +68,579 @@ const labelStyle: React.CSSProperties = {
   fontWeight: '500'
 };
 
+const valueStyle: React.CSSProperties = {
+  fontSize: '14px',
+  color: '#333',
+  marginBottom: '15px'
+};
+
+const priorityBadgeStyle = (priority: string): React.CSSProperties => ({
+  display: 'inline-block',
+  padding: '4px 12px',
+  borderRadius: '16px',
+  fontSize: '12px',
+  fontWeight: '500',
+  backgroundColor: 
+    priority === 'urgent' ? '#ff4444' :
+    priority === 'high' ? '#ff9800' :
+    priority === 'medium' ? '#2196F3' : '#4CAF50',
+  color: 'white'
+});
+
+const statusBadgeStyle = (status: string): React.CSSProperties => ({
+  display: 'inline-block',
+  padding: '4px 12px',
+  borderRadius: '16px',
+  fontSize: '12px',
+  fontWeight: '500',
+  backgroundColor: 
+    status === 'open' ? '#2196F3' :
+    status === 'in_progress' ? '#ff9800' :
+    status === 'resolved' ? '#4CAF50' :
+    status === 'closed' ? '#9e9e9e' : '#f44336',
+  color: 'white'
+});
+
+const buttonStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  borderRadius: '4px',
+  border: 'none',
+  fontSize: '14px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  transition: 'all 0.3s',
+  marginRight: '8px'
+};
+
+const commentStyle: React.CSSProperties = {
+  backgroundColor: '#f9f9f9',
+  padding: '15px',
+  borderRadius: '6px',
+  marginBottom: '10px',
+  borderLeft: '3px solid #2196F3'
+};
+
+const internalCommentStyle: React.CSSProperties = {
+  ...commentStyle,
+  backgroundColor: '#fff3e0',
+  borderLeft: '3px solid #ff9800'
+};
+
+const textAreaStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px',
+  border: '1px solid #ddd',
+  borderRadius: '4px',
+  fontSize: '14px',
+  minHeight: '100px',
+  resize: 'vertical' as const,
+  boxSizing: 'border-box' as const
+};
+
 const selectStyle: React.CSSProperties = {
-  padding: '8px 12px',
+  padding: '8px',
   border: '1px solid #ddd',
   borderRadius: '4px',
   fontSize: '14px',
   backgroundColor: '#fff',
   cursor: 'pointer',
-  transition: 'border-color 0.3s',
-  outline: 'none'
+  minWidth: '150px'
 };
 
-const searchInputStyle: React.CSSProperties = {
-  ...selectStyle,
-  minWidth: '250px'
-};
+export default function TicketDetailPage() {
+  const router = useRouter();
+  const params = useParams();
+  const ticketId = params?.id as string;
+  
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isInternalComment, setIsInternalComment] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  
+  const [editedTicket, setEditedTicket] = useState<Partial<Ticket>>({});
 
-const resetButtonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  backgroundColor: '#f5f5f5',
-  border: '1px solid #ddd',
-  borderRadius: '4px',
-  fontSize: '14px',
-  cursor: 'pointer',
-  transition: 'all 0.3s',
-  marginTop: '20px'
-};
+  useEffect(() => {
+    if (ticketId) {
+      fetchTicketDetails();
+      fetchComments();
+    }
+  }, [ticketId]);
 
-const statsStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '20px',
-  marginTop: '15px',
-  paddingTop: '15px',
-  borderTop: '1px solid #f0f0f0'
-};
+  async function fetchTicketDetails() {
+    setLoading(true);
+    try {
+      // טעינת הטיקט
+      const { data: ticketData, error: ticketError } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('id', ticketId)
+        .single();
 
-const statItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px'
-};
+      if (ticketError) throw ticketError;
+      
+      setTicket(ticketData);
+      setEditedTicket(ticketData);
 
-const statLabelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#999'
-};
+      // טעינת פרטי הלקוח אם קיים
+      if (ticketData?.customer_id) {
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', ticketData.customer_id)
+          .single();
+        
+        setCustomer(customerData);
+      }
+    } catch (error) {
+      console.error('Error fetching ticket:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-const statValueStyle: React.CSSProperties = {
-  fontSize: '18px',
-  fontWeight: 'bold',
-  color: '#333'
-};
+  async function fetchComments() {
+    const { data, error } = await supabase
+      .from('ticket_comments')
+      .select('*')
+      .eq('ticket_id', ticketId)
+      .order('created_at', { ascending: true });
 
-export default function TicketFilters({ filters, onFilterChange }: TicketFiltersProps) {
-  const handleFilterChange = (key: string, value: string) => {
-    onFilterChange({
-      ...filters,
-      [key]: value
-    });
+    if (!error && data) {
+      setComments(data);
+    }
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!ticket) return;
+    
+    const { error } = await supabase
+      .from('tickets')
+      .update({ 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+
+    if (!error) {
+      setTicket({ ...ticket, status: newStatus });
+      // הוספת הערה אוטומטית על שינוי סטטוס
+      await addSystemComment(`הסטטוס שונה ל: ${newStatus}`);
+    }
   };
 
-  const handleReset = () => {
-    onFilterChange({
-      status: '',
-      priority: '',
-      category: '',
-      search: ''
-    });
+  const handlePriorityChange = async (newPriority: string) => {
+    if (!ticket) return;
+    
+    const { error } = await supabase
+      .from('tickets')
+      .update({ 
+        priority: newPriority,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+
+    if (!error) {
+      setTicket({ ...ticket, priority: newPriority });
+      await addSystemComment(`העדיפות שונתה ל: ${newPriority}`);
+    }
   };
 
-  const hasActiveFilters = Object.values(filters).some(value => value !== '');
+  const addSystemComment = async (content: string) => {
+    await supabase
+      .from('ticket_comments')
+      .insert({
+        ticket_id: ticketId,
+        content: content,
+        user_name: 'מערכת',
+        is_internal: false,
+        created_at: new Date().toISOString()
+      });
+    
+    fetchComments();
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return;
+    
+    setSubmittingComment(true);
+    try {
+      const { error } = await supabase
+        .from('ticket_comments')
+        .insert({
+          ticket_id: ticketId,
+          content: newComment,
+          user_name: 'משתמש', // בהמשך נשלוף מהמשתמש המחובר
+          is_internal: isInternalComment,
+          created_at: new Date().toISOString()
+        });
+
+      if (!error) {
+        setNewComment('');
+        fetchComments();
+        
+        // עדכון תאריך עדכון אחרון של הטיקט
+        await supabase
+          .from('tickets')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', ticketId);
+      }
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          ...editedTicket,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', ticketId);
+
+      if (!error) {
+        setTicket(editedTicket as Ticket);
+        setEditMode(false);
+      }
+    } catch (error) {
+      console.error('Error updating ticket:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...containerStyle, textAlign: 'center', padding: '50px' }}>
+        <div>טוען פרטי טיקט...</div>
+      </div>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <div style={{ ...containerStyle, textAlign: 'center', padding: '50px' }}>
+        <div>הטיקט לא נמצא</div>
+      </div>
+    );
+  }
 
   return (
     <div style={containerStyle}>
-      <div style={filtersRowStyle}>
-        {/* Search */}
-        <div style={{ ...filterGroupStyle, flex: 1 }}>
-          <label style={labelStyle}>חיפוש</label>
-          <input
-            type="text"
-            placeholder="חפש לפי כותרת או תיאור..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-            style={searchInputStyle}
-          />
+      {/* Header */}
+      <div style={headerStyle}>
+        <div>
+          <h1 style={titleStyle}>
+            {editMode ? (
+              <input
+                type="text"
+                value={editedTicket.title}
+                onChange={(e) => setEditedTicket({...editedTicket, title: e.target.value})}
+                style={{
+                  fontSize: '24px',
+                  padding: '8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  width: '100%'
+                }}
+              />
+            ) : (
+              ticket.title
+            )}
+          </h1>
+          <div style={{ marginTop: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ color: '#666' }}>#{ticket.id.slice(0, 8)}</span>
+            <span style={priorityBadgeStyle(ticket.priority)}>
+              {ticket.priority === 'urgent' ? 'דחוף' :
+               ticket.priority === 'high' ? 'גבוה' :
+               ticket.priority === 'medium' ? 'בינוני' : 'נמוך'}
+            </span>
+            <span style={statusBadgeStyle(ticket.status)}>
+              {ticket.status === 'open' ? 'פתוח' :
+               ticket.status === 'in_progress' ? 'בטיפול' :
+               ticket.status === 'resolved' ? 'נפתר' :
+               ticket.status === 'closed' ? 'סגור' : 'בהמתנה'}
+            </span>
+          </div>
         </div>
-
-        {/* Status Filter */}
-        <div style={filterGroupStyle}>
-          <label style={labelStyle}>סטטוס</label>
-          <select
-            value={filters.status}
-            onChange={(e) => handleFilterChange('status', e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">כל הסטטוסים</option>
-            <option value="open">פתוח</option>
-            <option value="in_progress">בטיפול</option>
-            <option value="pending">בהמתנה</option>
-            <option value="resolved">נפתר</option>
-            <option value="closed">סגור</option>
-          </select>
+        <div>
+          {editMode ? (
+            <>
+              <button
+                onClick={handleSaveEdit}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#4CAF50',
+                  color: 'white'
+                }}
+              >
+                שמור שינויים
+              </button>
+              <button
+                onClick={() => {
+                  setEditMode(false);
+                  setEditedTicket(ticket);
+                }}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#f5f5f5',
+                  color: '#333'
+                }}
+              >
+                ביטול
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setEditMode(true)}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#2196F3',
+                  color: 'white'
+                }}
+              >
+                ערוך טיקט
+              </button>
+              <button
+                onClick={() => router.push('/tickets')}
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: '#f5f5f5',
+                  color: '#333'
+                }}
+              >
+                חזור לרשימה
+              </button>
+            </>
+          )}
         </div>
-
-        {/* Priority Filter */}
-        <div style={filterGroupStyle}>
-          <label style={labelStyle}>עדיפות</label>
-          <select
-            value={filters.priority}
-            onChange={(e) => handleFilterChange('priority', e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">כל העדיפויות</option>
-            <option value="low">נמוכה</option>
-            <option value="medium">בינונית</option>
-            <option value="high">גבוהה</option>
-            <option value="urgent">דחוף</option>
-          </select>
-        </div>
-
-        {/* Category Filter */}
-        <div style={filterGroupStyle}>
-          <label style={labelStyle}>קטגוריה</label>
-          <select
-            value={filters.category}
-            onChange={(e) => handleFilterChange('category', e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">כל הקטגוריות</option>
-            <option value="support">תמיכה</option>
-            <option value="bug">באג</option>
-            <option value="feature">בקשת פיצר</option>
-            <option value="other">אחר</option>
-          </select>
-        </div>
-
-        {/* Reset Button */}
-        {hasActiveFilters && (
-          <button
-            onClick={handleReset}
-            style={resetButtonStyle}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#e0e0e0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
-            }}
-          >
-            נקה פילטרים
-          </button>
-        )}
       </div>
 
-      {/* Quick Stats (Optional) */}
-      <div style={statsStyle}>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>פתוחים:</span>
-          <span style={statValueStyle}>12</span>
+      <div style={mainContentStyle}>
+        {/* Main Content */}
+        <div>
+          {/* Description */}
+          <div style={{ ...cardStyle, marginBottom: '20px' }}>
+            <h2 style={sectionTitleStyle}>תיאור</h2>
+            {editMode ? (
+              <textarea
+                value={editedTicket.description}
+                onChange={(e) => setEditedTicket({...editedTicket, description: e.target.value})}
+                style={textAreaStyle}
+              />
+            ) : (
+              <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                {ticket.description}
+              </p>
+            )}
+          </div>
+
+          {/* Comments Section */}
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>הערות ועדכונים</h2>
+            
+            <div style={{ marginBottom: '20px' }}>
+              {comments.map(comment => (
+                <div
+                  key={comment.id}
+                  style={comment.is_internal ? internalCommentStyle : commentStyle}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <strong>{comment.user_name || 'משתמש'}</strong>
+                    <span style={{ fontSize: '12px', color: '#999' }}>
+                      {new Date(comment.created_at).toLocaleString('he-IL')}
+                    </span>
+                  </div>
+                  {comment.is_internal && (
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#ff9800',
+                      marginBottom: '5px',
+                      fontWeight: '500'
+                    }}>
+                      הערה פנימית
+                    </div>
+                  )}
+                  <div>{comment.content}</div>
+                </div>
+              ))}
+              
+              {comments.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                  אין הערות עדיין
+                </div>
+              )}
+            </div>
+
+            {/* Add Comment Form */}
+            <div style={{ borderTop: '1px solid #eee', paddingTop: '20px' }}>
+              <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>הוסף הערה</h3>
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="כתוב את ההערה שלך כאן..."
+                style={textAreaStyle}
+              />
+              <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={isInternalComment}
+                    onChange={(e) => setIsInternalComment(e.target.checked)}
+                  />
+                  <span style={{ fontSize: '14px' }}>הערה פנימית</span>
+                </label>
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || submittingComment}
+                  style={{
+                    ...buttonStyle,
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    opacity: (!newComment.trim() || submittingComment) ? 0.6 : 1,
+                    cursor: (!newComment.trim() || submittingComment) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {submittingComment ? 'שולח...' : 'הוסף הערה'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>בטיפול:</span>
-          <span style={statValueStyle}>5</span>
-        </div>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>דחופים:</span>
-          <span style={{ ...statValueStyle, color: '#ff4444' }}>3</span>
+
+        {/* Sidebar */}
+        <div>
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>פרטי טיקט</h2>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>סטטוס</label>
+              <select
+                value={ticket.status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="open">פתוח</option>
+                <option value="in_progress">בטיפול</option>
+                <option value="pending">בהמתנה</option>
+                <option value="resolved">נפתר</option>
+                <option value="closed">סגור</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>עדיפות</label>
+              <select
+                value={ticket.priority}
+                onChange={(e) => handlePriorityChange(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="low">נמוכה</option>
+                <option value="medium">בינונית</option>
+                <option value="high">גבוהה</option>
+                <option value="urgent">דחוף</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>קטגוריה</label>
+              <div style={valueStyle}>{ticket.category || 'לא מוגדר'}</div>
+            </div>
+
+            {customer && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={labelStyle}>לקוח</label>
+                <div style={valueStyle}>
+                  {customer.name}
+                  <div style={{ fontSize: '12px', color: '#999' }}>
+                    {customer.email}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>נוצר בתאריך</label>
+              <div style={valueStyle}>
+                {new Date(ticket.created_at).toLocaleString('he-IL')}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>עודכן לאחרונה</label>
+              <div style={valueStyle}>
+                {new Date(ticket.updated_at).toLocaleString('he-IL')}
+              </div>
+            </div>
+
+            {ticket.tags && ticket.tags.length > 0 && (
+              <div>
+                <label style={labelStyle}>תגיות</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                  {ticket.tags.map(tag => (
+                    <span
+                      key={tag}
+                      style={{
+                        backgroundColor: '#e0e0e0',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <div style={{ ...cardStyle, marginTop: '20px' }}>
+            <h2 style={sectionTitleStyle}>פעולות מהירות</h2>
+            <button
+              onClick={() => handleStatusChange('closed')}
+              disabled={ticket.status === 'closed'}
+              style={{
+                ...buttonStyle,
+                width: '100%',
+                backgroundColor: ticket.status === 'closed' ? '#ccc' : '#f44336',
+                color: 'white',
+                marginBottom: '10px'
+              }}
+            >
+              סגור טיקט
+            </button>
+            <button
+              onClick={() => handleStatusChange('in_progress')}
+              disabled={ticket.status === 'in_progress'}
+              style={{
+                ...buttonStyle,
+                width: '100%',
+                backgroundColor: ticket.status === 'in_progress' ? '#ccc' : '#ff9800',
+                color: 'white',
+                marginBottom: '10px'
+              }}
+            >
+              סמן כבטיפול
+            </button>
+            <button
+              onClick={() => handlePriorityChange('urgent')}
+              disabled={ticket.priority === 'urgent'}
+              style={{
+                ...buttonStyle,
+                width: '100%',
+                backgroundColor: ticket.priority === 'urgent' ? '#ccc' : '#ff4444',
+                color: 'white'
+              }}
+            >
+              סמן כדחוף
+            </button>
+          </div>
         </div>
       </div>
     </div>

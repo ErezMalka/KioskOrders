@@ -1,171 +1,298 @@
-import React from 'react';
+'use client';
 
-interface TicketFiltersProps {
-  filters: {
-    status: string;
-    priority: string;
-    category: string;
-    search: string;
-  };
-  onFilterChange: (filters: any) => void;
-}
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { Database } from '@/lib/database.types';
+
+type Customer = Database['public']['Tables']['customers']['Row'];
+type TicketInsert = Database['public']['Tables']['tickets']['Insert'];
 
 const containerStyle: React.CSSProperties = {
+  maxWidth: '800px',
+  margin: '0 auto',
+  padding: '20px'
+};
+
+const formStyle: React.CSSProperties = {
   backgroundColor: '#fff',
   borderRadius: '8px',
-  padding: '20px',
-  marginBottom: '20px',
+  padding: '30px',
   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
 };
 
-const filtersRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '15px',
-  flexWrap: 'wrap' as const,
-  alignItems: 'center'
-};
-
-const filterGroupStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column' as const,
-  minWidth: '150px'
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#666',
-  marginBottom: '4px',
-  fontWeight: '500'
-};
-
-const selectStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  border: '1px solid #ddd',
-  borderRadius: '4px',
-  fontSize: '14px',
-  backgroundColor: '#fff',
-  cursor: 'pointer',
-  transition: 'border-color 0.3s',
-  outline: 'none'
-};
-
-const searchInputStyle: React.CSSProperties = {
-  ...selectStyle,
-  minWidth: '250px'
-};
-
-const resetButtonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  backgroundColor: '#f5f5f5',
-  border: '1px solid #ddd',
-  borderRadius: '4px',
-  fontSize: '14px',
-  cursor: 'pointer',
-  transition: 'all 0.3s',
-  marginTop: '20px'
-};
-
-const statsStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '20px',
-  marginTop: '15px',
-  paddingTop: '15px',
-  borderTop: '1px solid #f0f0f0'
-};
-
-const statItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px'
-};
-
-const statLabelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#999'
-};
-
-const statValueStyle: React.CSSProperties = {
-  fontSize: '18px',
+const titleStyle: React.CSSProperties = {
+  fontSize: '24px',
   fontWeight: 'bold',
+  marginBottom: '30px',
   color: '#333'
 };
 
-export default function TicketFilters({ filters, onFilterChange }: TicketFiltersProps) {
-  const handleFilterChange = (key: string, value: string) => {
-    onFilterChange({
-      ...filters,
-      [key]: value
-    });
+const formGroupStyle: React.CSSProperties = {
+  marginBottom: '20px'
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: '8px',
+  fontSize: '14px',
+  fontWeight: '500',
+  color: '#555'
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid #ddd',
+  borderRadius: '4px',
+  fontSize: '14px',
+  transition: 'border-color 0.3s',
+  boxSizing: 'border-box' as const
+};
+
+const textAreaStyle: React.CSSProperties = {
+  ...inputStyle,
+  minHeight: '120px',
+  resize: 'vertical' as const
+};
+
+const selectStyle: React.CSSProperties = {
+  ...inputStyle,
+  backgroundColor: '#fff',
+  cursor: 'pointer'
+};
+
+const buttonStyle: React.CSSProperties = {
+  padding: '12px 24px',
+  borderRadius: '4px',
+  border: 'none',
+  fontSize: '16px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  transition: 'all 0.3s'
+};
+
+const submitButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  backgroundColor: '#4CAF50',
+  color: 'white',
+  marginRight: '10px'
+};
+
+const cancelButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  backgroundColor: '#f5f5f5',
+  color: '#333'
+};
+
+const errorStyle: React.CSSProperties = {
+  backgroundColor: '#fee',
+  color: '#c33',
+  padding: '12px',
+  borderRadius: '4px',
+  marginBottom: '20px'
+};
+
+const fileInputContainerStyle: React.CSSProperties = {
+  marginBottom: '20px'
+};
+
+const fileInputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px',
+  border: '2px dashed #ddd',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  backgroundColor: '#f9f9f9'
+};
+
+export default function NewTicketPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    status: 'open' as const,
+    customer_id: '',
+    category: 'support' as 'support' | 'bug' | 'feature' | 'other',
+    tags: [] as string[],
+    custom_fields: {}
+  });
+
+  const [tagInput, setTagInput] = useState('');
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  async function fetchCustomers() {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('name');
+
+    if (!error && data) {
+      setCustomers(data);
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setAttachments(prev => [...prev, ...newFiles]);
+    }
   };
 
-  const handleReset = () => {
-    onFilterChange({
-      status: '',
-      priority: '',
-      category: '',
-      search: ''
-    });
+  const removeFile = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  const hasActiveFilters = Object.values(filters).some(value => value !== '');
+  const addTag = () => {
+    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, tagInput.trim()]
+      }));
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(t => t !== tag)
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      // יצירת הטיקט
+      const ticketData: TicketInsert = {
+        ...formData,
+        customer_id: formData.customer_id || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: ticket, error: ticketError } = await supabase
+        .from('tickets')
+        .insert([ticketData])
+        .select()
+        .single();
+
+      if (ticketError) throw ticketError;
+
+      // העלאת קבצים אם יש
+      if (ticket && attachments.length > 0) {
+        for (const file of attachments) {
+          const fileName = `${ticket.id}/${Date.now()}_${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from('ticket-attachments')
+            .upload(fileName, file);
+
+          if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+          } else {
+            // שמירת מידע על הקובץ בטבלה
+            await supabase
+              .from('ticket_attachments')
+              .insert({
+                ticket_id: ticket.id,
+                file_name: file.name,
+                file_path: fileName,
+                file_size: file.size,
+                mime_type: file.type
+              });
+          }
+        }
+      }
+
+      router.push(`/tickets/${ticket?.id}`);
+    } catch (err: any) {
+      setError(err.message || 'שגיאה ביצירת הטיקט');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={containerStyle}>
-      <div style={filtersRowStyle}>
-        {/* Search */}
-        <div style={{ ...filterGroupStyle, flex: 1 }}>
-          <label style={labelStyle}>חיפוש</label>
+      <form style={formStyle} onSubmit={handleSubmit}>
+        <h1 style={titleStyle}>יצירת טיקט חדש</h1>
+        
+        {error && <div style={errorStyle}>{error}</div>}
+
+        <div style={formGroupStyle}>
+          <label style={labelStyle}>כותרת *</label>
           <input
             type="text"
-            placeholder="חפש לפי כותרת או תיאור..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-            style={searchInputStyle}
+            required
+            style={inputStyle}
+            value={formData.title}
+            onChange={(e) => setFormData({...formData, title: e.target.value})}
+            placeholder="תאר בקצרה את הבעיה"
           />
         </div>
 
-        {/* Status Filter */}
-        <div style={filterGroupStyle}>
-          <label style={labelStyle}>סטטוס</label>
-          <select
-            value={filters.status}
-            onChange={(e) => handleFilterChange('status', e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">כל הסטטוסים</option>
-            <option value="open">פתוח</option>
-            <option value="in_progress">בטיפול</option>
-            <option value="pending">בהמתנה</option>
-            <option value="resolved">נפתר</option>
-            <option value="closed">סגור</option>
-          </select>
+        <div style={formGroupStyle}>
+          <label style={labelStyle}>תיאור מפורט *</label>
+          <textarea
+            required
+            style={textAreaStyle}
+            value={formData.description}
+            onChange={(e) => setFormData({...formData, description: e.target.value})}
+            placeholder="פרט את הבעיה, מה ניסית לעשות ומה הייתה התוצאה"
+          />
         </div>
 
-        {/* Priority Filter */}
-        <div style={filterGroupStyle}>
-          <label style={labelStyle}>עדיפות</label>
-          <select
-            value={filters.priority}
-            onChange={(e) => handleFilterChange('priority', e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">כל העדיפויות</option>
-            <option value="low">נמוכה</option>
-            <option value="medium">בינונית</option>
-            <option value="high">גבוהה</option>
-            <option value="urgent">דחוף</option>
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div style={formGroupStyle}>
+            <label style={labelStyle}>לקוח</label>
+            <select
+              style={selectStyle}
+              value={formData.customer_id}
+              onChange={(e) => setFormData({...formData, customer_id: e.target.value})}
+            >
+              <option value="">בחר לקוח</option>
+              {customers.map(customer => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={formGroupStyle}>
+            <label style={labelStyle}>עדיפות</label>
+            <select
+              style={selectStyle}
+              value={formData.priority}
+              onChange={(e) => setFormData({...formData, priority: e.target.value as any})}
+            >
+              <option value="low">נמוכה</option>
+              <option value="medium">בינונית</option>
+              <option value="high">גבוהה</option>
+              <option value="urgent">דחוף</option>
+            </select>
+          </div>
         </div>
 
-        {/* Category Filter */}
-        <div style={filterGroupStyle}>
+        <div style={formGroupStyle}>
           <label style={labelStyle}>קטגוריה</label>
           <select
-            value={filters.category}
-            onChange={(e) => handleFilterChange('category', e.target.value)}
             style={selectStyle}
+            value={formData.category}
+            onChange={(e) => setFormData({...formData, category: e.target.value as any})}
           >
-            <option value="">כל הקטגוריות</option>
             <option value="support">תמיכה</option>
             <option value="bug">באג</option>
             <option value="feature">בקשת פיצר</option>
@@ -173,38 +300,130 @@ export default function TicketFilters({ filters, onFilterChange }: TicketFilters
           </select>
         </div>
 
-        {/* Reset Button */}
-        {hasActiveFilters && (
+        <div style={formGroupStyle}>
+          <label style={labelStyle}>תגיות</label>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <input
+              type="text"
+              style={{ ...inputStyle, flex: 1 }}
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+              placeholder="הוסף תגית ולחץ Enter"
+            />
+            <button
+              type="button"
+              onClick={addTag}
+              style={{
+                ...buttonStyle,
+                backgroundColor: '#2196F3',
+                color: 'white',
+                padding: '10px 20px'
+              }}
+            >
+              הוסף
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {formData.tags.map(tag => (
+              <span
+                key={tag}
+                style={{
+                  backgroundColor: '#e0e0e0',
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => removeTag(tag)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#999',
+                    cursor: 'pointer',
+                    fontSize: '18px',
+                    padding: 0,
+                    lineHeight: 1
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div style={fileInputContainerStyle}>
+          <label style={labelStyle}>קבצים מצורפים</label>
+          <input
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            style={fileInputStyle}
+          />
+          {attachments.length > 0 && (
+            <div style={{ marginTop: '10px' }}>
+              {attachments.map((file, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '4px',
+                    marginBottom: '5px'
+                  }}
+                >
+                  <span>{file.name} ({(file.size / 1024).toFixed(1)} KB)</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    style={{
+                      background: '#ff4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    הסר
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'flex-start' }}>
           <button
-            onClick={handleReset}
-            style={resetButtonStyle}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#e0e0e0';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            type="submit"
+            disabled={loading}
+            style={{
+              ...submitButtonStyle,
+              opacity: loading ? 0.6 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            נקה פילטרים
+            {loading ? 'יוצר טיקט...' : 'צור טיקט'}
           </button>
-        )}
-      </div>
-
-      {/* Quick Stats (Optional) */}
-      <div style={statsStyle}>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>פתוחים:</span>
-          <span style={statValueStyle}>12</span>
+          <button
+            type="button"
+            onClick={() => router.push('/tickets')}
+            style={cancelButtonStyle}
+          >
+            ביטול
+          </button>
         </div>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>בטיפול:</span>
-          <span style={statValueStyle}>5</span>
-        </div>
-        <div style={statItemStyle}>
-          <span style={statLabelStyle}>דחופים:</span>
-          <span style={{ ...statValueStyle, color: '#ff4444' }}>3</span>
-        </div>
-      </div>
+      </form>
     </div>
   );
 }

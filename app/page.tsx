@@ -1,30 +1,100 @@
-export default function HomePage() {
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-4xl font-bold mb-8">מערכת CRM</h1>
-      
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">ברוך הבא למערכת</h2>
-        <p className="text-gray-600">
-          המערכת בבנייה - נתחיל להוסיף פונקציונליות בהדרגה
-        </p>
-      </div>
+'use client'
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-          <div className="text-3xl font-bold text-blue-600">0</div>
-          <div className="text-sm text-gray-600 mt-2">לקוחות</div>
-        </div>
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+
+export default function HomePage() {
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    checkUser()
+  }, [])
+
+  const checkUser = async () => {
+    setLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        setProfile(data)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+    }
+    setLoading(false)
+  }
+
+  const handleLogin = async () => {
+    const email = 'erez@bite.co.il'
+    const password = prompt('הכנס סיסמה:')
+    
+    if (!password) return
+    
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+    
+    if (error) {
+      alert('שגיאה: ' + error.message)
+    } else {
+      checkUser()
+    }
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setProfile(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">טוען...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8" dir="rtl">
+      <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6">
+        <h1 className="text-2xl font-bold mb-4">מערכת CRM</h1>
         
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-          <div className="text-3xl font-bold text-green-600">0</div>
-          <div className="text-sm text-gray-600 mt-2">לידים</div>
-        </div>
-        
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 text-center">
-          <div className="text-3xl font-bold text-purple-600">0</div>
-          <div className="text-sm text-gray-600 mt-2">משימות</div>
-        </div>
+        {!user ? (
+          <div>
+            <p className="mb-4">לא מחובר</p>
+            <button
+              onClick={handleLogin}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              התחבר עם erez@bite.co.il
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div className="bg-green-50 p-4 rounded mb-4">
+              <p className="font-bold">✅ מחובר בהצלחה!</p>
+              <p className="text-sm mt-2">שם: {profile?.full_name}</p>
+              <p className="text-sm">תפקיד: {profile?.role}</p>
+              <p className="text-sm">אימייל: {user.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            >
+              התנתק
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

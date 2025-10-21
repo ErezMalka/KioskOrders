@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -34,6 +33,7 @@ export default function HomePage() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setUser(null)
+    router.push('/login')  // ניווט לדף הכניסה אחרי התנתקות
   }
 
   return (

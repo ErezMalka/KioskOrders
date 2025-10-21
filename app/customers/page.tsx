@@ -1,53 +1,54 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 
 export default function CustomersPage() {
-  const [name, setName] = useState('לקוח ניסיון')
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [message, setMessage] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    // נסה להוסיף לקוח פשוט
+  const testAdd = async () => {
+    setMessage('מנסה להוסיף...')
+    
+    // ניסיון פשוט להוסיף לקוח
     const { data, error } = await supabase
       .from('customers')
-      .insert({ name })
+      .insert({ 
+        name: 'לקוח ניסיון ' + new Date().toLocaleTimeString('he-IL')
+      })
       .select()
 
     if (error) {
-      alert('שגיאה: ' + error.message)
-      console.error(error)
+      setMessage('שגיאה: ' + error.message)
+      console.error('Full error:', error)
     } else {
-      alert('לקוח נוסף בהצלחה!')
+      setMessage('הצלחה! לקוח נוסף')
+      console.log('Success:', data)
     }
-    
-    setLoading(false)
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8" dir="rtl">
-      <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-4">בדיקה פשוטה</h1>
+      <div className="max-w-md mx-auto bg-white p-6 rounded shadow">
+        <h1 className="text-2xl font-bold mb-4">בדיקת הוספת לקוח</h1>
         
         <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          onClick={testAdd}
+          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 mb-4"
         >
-          {loading ? 'מוסיף...' : 'הוסף לקוח ניסיון'}
+          הוסף לקוח ניסיון
         </button>
         
-        <button
-          onClick={() => router.push('/')}
-          className="mr-2 bg-gray-300 px-4 py-2 rounded"
-        >
-          חזור
-        </button>
+        {message && (
+          <div className={`p-4 rounded ${
+            message.includes('שגיאה') ? 'bg-red-100' : 'bg-green-100'
+          }`}>
+            {message}
+          </div>
+        )}
+        
+        <a href="/" className="block mt-4 text-blue-500 hover:underline">
+          חזור לדף הבית
+        </a>
       </div>
     </div>
   )

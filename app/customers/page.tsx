@@ -4,51 +4,85 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function CustomersPage() {
+  const [name, setName] = useState('')
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const testAdd = async () => {
-    setMessage('מנסה להוסיף...')
-    
-    // ניסיון פשוט להוסיף לקוח
-    const { data, error } = await supabase
-      .from('customers')
-      .insert({ 
-        name: 'לקוח ניסיון ' + new Date().toLocaleTimeString('he-IL')
-      })
-      .select()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage('')
 
-    if (error) {
-      setMessage('שגיאה: ' + error.message)
-      console.error('Full error:', error)
-    } else {
-      setMessage('הצלחה! לקוח נוסף')
-      console.log('Success:', data)
+    try {
+      // פשוט ננסה להוסיף לקוח בלי שום בדיקות
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({ 
+          name: name || 'לקוח ללא שם'
+        })
+        .select()
+
+      if (error) throw error
+
+      setMessage('✅ הלקוח נוסף בהצלחה!')
+      setName('')
+      
+      // רענן את רשימת הלקוחות
+      const { data: customers } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5)
+      
+      console.log('לקוחות אחרונים:', customers)
+      
+    } catch (error: any) {
+      setMessage('❌ שגיאה: ' + error.message)
+      console.error('Error details:', error)
     }
+    
+    setLoading(false)
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8" dir="rtl">
-      <div className="max-w-md mx-auto bg-white p-6 rounded shadow">
-        <h1 className="text-2xl font-bold mb-4">בדיקת הוספת לקוח</h1>
+      <div className="max-w-md mx-auto">
+        <h1 className="text-2xl font-bold mb-6">הוספת לקוח</h1>
         
-        <button
-          onClick={testAdd}
-          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 mb-4"
-        >
-          הוסף לקוח ניסיון
-        </button>
-        
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow">
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">שם הלקוח</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full p-2 border rounded"
+              placeholder="הכנס שם לקוח"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {loading ? 'שומר...' : 'הוסף לקוח'}
+          </button>
+        </form>
+
         {message && (
-          <div className={`p-4 rounded ${
-            message.includes('שגיאה') ? 'bg-red-100' : 'bg-green-100'
+          <div className={`mt-4 p-4 rounded ${
+            message.includes('✅') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
           }`}>
             {message}
           </div>
         )}
-        
-        <a href="/" className="block mt-4 text-blue-500 hover:underline">
-          חזור לדף הבית
-        </a>
+
+        <div className="mt-4">
+          <a href="/" className="text-blue-500 hover:underline">
+            ← חזור לדף הבית
+          </a>
+        </div>
       </div>
     </div>
   )
